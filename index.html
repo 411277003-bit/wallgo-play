@@ -892,8 +892,12 @@ let shards=[], bursts=[], breakers=[true,true,true,true], lastBreak=-99;
 let introHero=null, armAlpha=0, hammerAng=0, introSmashed=false, shake=0, cageKeys=[];
 let impact=null, NOW=0, introStage=null;
 
-/* 牆的立體厚度與 footprint 半厚（單位：格）*/
+/* 牆的立體厚度與 footprint 半厚（單位：格）。
+   擠出只往螢幕上方長，對橫牆是加在厚度上（視覺 2*WALL_T + WALL_H 格厚），
+   對直牆卻是加在長度上 —— 所以直牆若照抄 footprint 會比橫牆窄三倍。
+   WALL_VIS 就是橫牆的視覺厚度，直牆直接用它當寬度才會一致。 */
 const WALL_H = 0.30, WALL_T = 0.075;
+const WALL_VIS = 2*WALL_T + WALL_H;
 
 const JOLT_ZERO = { z:0, ox:0, oy:0 };
 /* 座標雜湊：同一格每幀都得到同一組亂數，物件才不會逐幀抖動 */
@@ -1183,9 +1187,15 @@ function drawWall(key, info, now){
   if(h<=0.5) return;
   const t=WALL_T, col=C.p[info.p];
   const j = d==='H' ? joltAt(x+0.5,y) : joltAt(x,y+0.5);
-  /* 長度剛好一格，不外推，才不會比棋盤格還寬 */
-  if(d==='H') box(x+j.ox,y-t+j.oy,x+1+j.ox,y+t+j.oy,h,col.wallSide,col.wall,j.z);
-  else box(x-t+j.ox,y+j.oy,x+t+j.ox,y+1+j.oy,h,col.wallSide,col.wall,j.z);
+  if(d==='H'){
+    /* 橫牆：footprint 2*WALL_T 厚，擠出後視覺 1 × WALL_VIS 格 */
+    box(x+j.ox, y-t+j.oy, x+1+j.ox, y+t+j.oy, h, col.wallSide, col.wall, j.z);
+  } else {
+    /* 直牆：寬度直接取 WALL_VIS 與橫牆對齊；footprint 長度扣掉擠出量並下移，
+       擠出後上緣才會準確落在格線上，視覺剛好 WALL_VIS × 1 格。 */
+    const vt = WALL_VIS/2, hz = h/S;
+    box(x-vt+j.ox, y+hz+j.oy, x+vt+j.ox, y+1+j.oy, h, col.wallSide, col.wall, j.z);
+  }
 }
 
 function drawPiece(pc){
