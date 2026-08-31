@@ -785,7 +785,9 @@ function measureAuth(){
   const el = document.querySelector('.auth-inner');
   if(!el){ authBox = null; return; }
   const r = el.getBoundingClientRect();
-  authBox = r.height > 120 ? { h: r.height, cy: r.top + r.height/2 } : null;
+  authBox = r.height > 120
+    ? { h: r.height, w: r.width, left: r.left, right: r.right }
+    : null;
 }
 
 function setLayout(t, instant){
@@ -812,17 +814,20 @@ function applyLayout(){
     ? Math.min(Math.max(W - LOBBY_RESERVE*2, 260)/FRAME_SPAN, sH)
     : Math.min(W/(FRAME_SPAN+0.6), sH);
 
-  /* 靠右時對齊左側登入區塊：外框高度與它相同、垂直中心也對齊 */
+  /* 靠右時與左側登入區塊對稱：外框高度與它相同，且棋盤右邊距 ==
+     登入區塊左邊距，左右才會一樣寬；垂直一律取視窗正中，上下才會一樣高。 */
   let s1 = Math.min(W*0.55/(FRAME_SPAN+0.3), sH);
-  let cy1 = H / 2;
+  let cx1 = W * 0.71;
   if(authBox){
-    s1  = Math.min(s1, authBox.h / FRAME_SPAN);
-    cy1 = authBox.cy;
+    const margin = authBox.left;                       /* 目標邊距＝登入區塊的左邊距 */
+    const room   = W - 2*margin - authBox.w - 40;      /* 扣掉登入區塊與 40px 間隙 */
+    s1  = Math.min(s1, authBox.h/FRAME_SPAN, Math.max(room, 200)/FRAME_SPAN);
+    cx1 = W - margin - FRAME_SPAN*s1/2;                /* 右緣落在 W - margin */
   }
 
   S  = Math.max(s0 + (s1-s0)*t, 40);
-  OX = W * (0.5 + (0.71-0.5)*t);
-  OY = H/2 + (cy1 - H/2) * t;
+  OX = W*0.5 + (cx1 - W*0.5) * t;
+  OY = H/2;
 
   /* 矮視窗上登入區塊可能偏離中心，夾住上下不讓外框與投影被切掉 */
   const half = FRAME_SPAN*S/2, lo = half + 8, hi = H - SHADOW_PAD - half;
