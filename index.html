@@ -799,14 +799,15 @@ const SHADOW_PAD = 60;
 
 function applyLayout(){
   const t = W >= LAYOUT_MIN_W ? layoutT : 0;
-  const availH = Math.max(H - SHADOW_PAD, 160);
-  const sH = availH / (FRAME_SPAN + 0.6);              /* 上下各再留 0.3 格 */
+  /* 上下各留一份 SHADOW_PAD，外框才能真正置中而不是被投影擠得偏上 */
+  const availH = Math.max(H - SHADOW_PAD*2, 160);
+  const sH = availH / FRAME_SPAN;
   /* 置中：整個視窗都可用；靠右：只剩右側約 55% 的寬度 */
   const s0 = Math.min(W/(FRAME_SPAN+0.6), sH);
 
   /* 靠右時對齊左側登入區塊：外框高度與它相同、垂直中心也對齊 */
   let s1 = Math.min(W*0.55/(FRAME_SPAN+0.3), sH);
-  let cy1 = availH / 2;
+  let cy1 = H / 2;
   if(authBox){
     s1  = Math.min(s1, authBox.h / FRAME_SPAN);
     cy1 = authBox.cy;
@@ -814,7 +815,7 @@ function applyLayout(){
 
   S  = Math.max(s0 + (s1-s0)*t, 40);
   OX = W * (0.5 + (0.71-0.5)*t);
-  OY = availH/2 + (cy1 - availH/2) * t;
+  OY = H/2 + (cy1 - H/2) * t;
 
   /* 矮視窗上登入區塊可能偏離中心，夾住上下不讓外框與投影被切掉 */
   const half = FRAME_SPAN*S/2, lo = half + 8, hi = H - SHADOW_PAD - half;
@@ -891,9 +892,7 @@ let shards=[], bursts=[], breakers=[true,true,true,true], lastBreak=-99;
 let introHero=null, armAlpha=0, hammerAng=0, introSmashed=false, shake=0, cageKeys=[];
 let impact=null, NOW=0, introStage=null;
 
-/* 牆的立體厚度與 footprint 半厚（單位：格）——沿用改動前的比例。
-   兩個方向都是 footprint 2*WALL_T 厚 × 1 格長，再擠出 WALL_H，
-   視覺尺寸同為 (2*WALL_T + WALL_H) × 1 格。 */
+/* 牆的立體厚度與 footprint 半厚（單位：格）*/
 const WALL_H = 0.30, WALL_T = 0.075;
 
 const JOLT_ZERO = { z:0, ox:0, oy:0 };
@@ -1164,15 +1163,9 @@ function drawBoard(){
   poly(c); ctx.strokeStyle='rgba(19,41,75,.55)'; ctx.lineWidth=2; ctx.stroke();
 }
 
-/* h 為立體厚度（像素）。axis 決定往哪個方向擠出：
-   'y' 往螢幕上方，'x' 往螢幕左方。光源在左上，所以兩者的暗面都落在右下。
-   直牆改往側邊擠出，兩個方向的牆才是同一個形狀轉 90 度。 */
-function box(bx0,by0,bx1,by1,h,side,top,base=0,axis='y'){
-  const dx = axis==='x' ? -h/S : 0;
-  const dz = axis==='x' ? 0 : h;
+function box(bx0,by0,bx1,by1,h,side,top,base=0){
   const b=[proj(bx0,by0,base),proj(bx1,by0,base),proj(bx1,by1,base),proj(bx0,by1,base)];
-  const u=[proj(bx0+dx,by0,base+dz),proj(bx1+dx,by0,base+dz),
-           proj(bx1+dx,by1,base+dz),proj(bx0+dx,by1,base+dz)];
+  const u=[proj(bx0,by0,base+h),proj(bx1,by0,base+h),proj(bx1,by1,base+h),proj(bx0,by1,base+h)];
   const faces=[0,1,2,3].map(i=>({q:[b[i],b[(i+1)%4],u[(i+1)%4],u[i]],
     d:(b[i].Y+b[(i+1)%4].Y)/2}));
   faces.sort((a,c)=>a.d-c.d);
@@ -1190,11 +1183,9 @@ function drawWall(key, info, now){
   if(h<=0.5) return;
   const t=WALL_T, col=C.p[info.p];
   const j = d==='H' ? joltAt(x+0.5,y) : joltAt(x,y+0.5);
-  /* 兩個方向的 footprint 都是「2*WALL_T 厚 × 1 格長」，差別只在擠出方向：
-     橫牆往上、直牆往左。擠出量只加在垂直於牆身的那一軸上，
-     所以兩者的視覺尺寸與明暗比例完全相同，只是轉了 90 度。 */
-  if(d==='H') box(x+j.ox, y-t+j.oy, x+1+j.ox, y+t+j.oy, h, col.wallSide, col.wall, j.z, 'y');
-  else        box(x-t+j.ox, y+j.oy,   x+t+j.ox, y+1+j.oy, h, col.wallSide, col.wall, j.z, 'x');
+  /* 長度剛好一格，不外推，才不會比棋盤格還寬 */
+  if(d==='H') box(x+j.ox,y-t+j.oy,x+1+j.ox,y+t+j.oy,h,col.wallSide,col.wall,j.z);
+  else box(x-t+j.ox,y+j.oy,x+t+j.ox,y+1+j.oy,h,col.wallSide,col.wall,j.z);
 }
 
 function drawPiece(pc){
