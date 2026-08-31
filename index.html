@@ -692,7 +692,7 @@ muteBtn.onclick = () => toggleMusic();
 
 /* 背景音樂：assets/bgm.mp3（Carefree — Kevin MacLeod, CC BY 4.0）。
    瀏覽器一律禁止未經互動的自動播放，所以真正開聲是在第一次點擊／按鍵時。 */
-const BGM_VOLUME = 0.3;
+const BGM_VOLUME = 0.22;
 const bgmEl = document.getElementById('bgm');
 
 function musicOn(){ return !muteBtn.classList.contains('off'); }
@@ -707,69 +707,37 @@ function stopMusic(){ bgmEl.pause(); }
 
 /* 音效：Kenney 的 CC0 音效包，跟著背景對局動畫觸發。
    與背景音樂共用同一顆 🔈 開關。 */
-/* gain 是 Web Audio 的增益：HTMLAudioElement 的 volume 上限是 1，
-   破牆聲要比其他音明顯更重就必須走 GainNode（可以大於 1）。 */
+/* HTMLAudioElement.volume 的上限是 1，破牆聲要比其他音更重，就靠 layers：
+   同時播放多份同一個取樣來疊出音壓。
+   （不走 Web Audio 的 GainNode 是因為 createMediaElementSource 接上後
+     聲音只走那條路徑 —— AudioContext 停在 suspended、或以 file:// 開啟
+     導致來源被 taint 時，結果是完全沒聲音而且不會拋例外。） */
 const SFX = {
-  move:  { src: 'assets/sfx/piece-move.ogg', gain: 0.55 },   /* 圓柱棋子落定 */
-  wall:  { src: 'assets/sfx/wall-build.ogg', gain: 0.95 },   /* 木板立起 */
-  break: { src: 'assets/sfx/wall-break.ogg', gain: 3.20 },   /* 重擊破牆 —— 全場最重的一下 */
+  move:  { src: 'assets/sfx/piece-move.ogg', vol: 0.34, layers: 1 },   /* 圓柱棋子落定 */
+  wall:  { src: 'assets/sfx/wall-build.ogg', vol: 0.58, layers: 1 },   /* 木板立起 */
+  break: { src: 'assets/sfx/wall-break.ogg', vol: 1.00, layers: 3 },   /* 重擊破牆 —— 全場最重的一下 */
 };
 const sfxEls = {};
-for (const [name, { src, gain }] of Object.entries(SFX)) {
-  const a = new Audio(src);
-  a.preload = 'auto';
-  a.volume = Math.min(gain, 1);   /* Web Audio 不可用時的退路 */
-  sfxEls[name] = a;
-}
-
-/* 把音效接到 Web Audio 上：各自 GainNode 放大，再經過一顆限幅器，
-   增益超過 1 才不會變成破音而是變得結實。
-   createMediaElementSource 每個元素只能呼叫一次，且接上之後聲音只走這條
-   路徑 —— AudioContext 若處於 suspended 就完全沒聲音，所以只在使用者
-   互動之後才建立。 */
-let sfxCtx = null;
-function routeSfx(){
-  if (sfxCtx) return;
-  const AC = window.AudioContext || window.webkitAudioContext;
-  if (!AC) return;                 /* 不支援就沿用上面的 volume */
-  try {
-    sfxCtx = new AC();
-    const limiter = sfxCtx.createDynamicsCompressor();
-    limiter.threshold.value = -6;
-    limiter.knee.value = 4;
-    limiter.ratio.value = 12;
-    limiter.attack.value = 0.002;
-    limiter.release.value = 0.18;
-    limiter.connect(sfxCtx.destination);
-
-    for (const [name, { gain }] of Object.entries(SFX)) {
-      const a = sfxEls[name];
-      const g = sfxCtx.createGain();
-      g.gain.value = gain;
-      sfxCtx.createMediaElementSource(a).connect(g);
-      g.connect(limiter);
-      a.volume = 1;                /* 音量交給 GainNode */
-    }
-  } catch (err) {
-    console.warn('音效無法接上 Web Audio，改用原始音量：', err);
-    sfxCtx = null;
-  }
+for (const [name, { src, vol, layers }] of Object.entries(SFX)) {
+  sfxEls[name] = Array.from({ length: layers }, () => {
+    const a = new Audio(src);
+    a.preload = 'auto';
+    a.volume = vol;
+    return a;
+  });
 }
 
 /* 音效只服務登入前的開場動畫。introStage 在開場結束時被設回 null，
    之後大廳的背景對局就回到只有背景音樂的狀態。 */
 function playSfx(name){
   if (introStage === null || !musicOn()) return;
-  const a = sfxEls[name];
-  if (!a) return;
-  if (sfxCtx && sfxCtx.state === 'suspended') sfxCtx.resume();
-  a.currentTime = 0;
-  a.play().catch(() => {});
+  const group = sfxEls[name];
+  if (!group) return;
+  group.forEach(a => { a.currentTime = 0; a.play().catch(() => {}); });
 }
 
 ['pointerdown', 'keydown'].forEach(ev =>
-  window.addEventListener(ev, () => { routeSfx(); startMusic(); },
-                          { once: true, passive: true }));
+  window.addEventListener(ev, () => startMusic(), { once: true, passive: true }));
 
 /* ═════════ 背景：Wall Go 對局模擬（棋子移動 + 建牆） ═════════ */
 const cv = document.getElementById('board'), ctx = cv.getContext('2d');

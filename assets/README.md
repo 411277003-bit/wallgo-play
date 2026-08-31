@@ -33,18 +33,20 @@ CC BY 4.0 要求標示出處，署名已放在 `index.html` 的「系統資訊�
 
 | 檔案 | 觸發時機 | 原始檔 |
 |---|---|---|
-| `piece-move.ogg` | 棋子開始移動（`startMove()`），增益 0.55 | `chip-lay-1` — Casino Audio |
-| `wall-build.ogg` | 牆蓋起來（`walls.set()`），四面牆收網時依序錯開 90ms，增益 0.95 | `impactWood_medium_000` — Impact Sounds |
-| `wall-break.ogg` | 破牆（`smashWall()`），增益 3.20 —— 全場最重的一下 | `impactMining_000` — Impact Sounds |
+| `piece-move.ogg` | 棋子開始移動（`startMove()`），音量 0.34 | `chip-lay-1` — Casino Audio |
+| `wall-build.ogg` | 牆蓋起來（`walls.set()`），四面牆收網時依序錯開 90ms，音量 0.58 | `impactWood_medium_000` — Impact Sounds |
+| `wall-break.ogg` | 破牆（`smashWall()`），音量 1.00 × **3 層疊播** —— 全場最重的一下 | `impactMining_000` — Impact Sounds |
 
-「增益」不是 `HTMLAudioElement.volume`（上限 1，破牆聲再怎麼調也大不過其他音）。
-`routeSfx()` 會在使用者第一次互動時把三個音效接到 Web Audio：各自一顆 `GainNode`
-（可以大於 1），再一起經過一顆 `DynamicsCompressorNode` 當限幅器，
-所以增益拉到 3.2 是變結實而不是破音。瀏覽器不支援 Web Audio 時退回 `volume`。
+`HTMLAudioElement.volume` 的上限是 `1`，破牆聲已經頂到天花板，再調數字不會有差別。
+要讓它明顯比其他音重，靠的是 `SFX.break.layers = 3`：`playSfx()` 同時播放三份
+同一個取樣疊出音壓（約 +9dB），另外把背景音樂壓到 `0.22`、其他音效壓低，
+讓那一下切得出來。
 
-注意 `createMediaElementSource()` 每個元素只能呼叫一次，而且接上之後聲音**只**走
-這條路徑 —— `AudioContext` 若停在 `suspended` 就完全沒聲音，因此只在使用者互動
-之後才建立，`playSfx()` 也會在必要時 `resume()`。
+**不要改回 Web Audio 的 `GainNode`。** 曾經試過用 `createMediaElementSource()` 加
+`GainNode`（可以大於 1）加限幅器，但那個 API 一旦接上，聲音就**只**走該路徑：
+`AudioContext` 停在 `suspended`、或以 `file://` 開啟導致媒體來源被 taint 時，
+結果是完全沒聲音，而且不會拋例外所以 `try/catch` 也接不到。疊播雖然土，
+但在所有瀏覽器與 `file://` 下都會動。
 
 全部出自 [Kenney](https://kenney.nl) 的音效包，授權
 [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/)（公共領域，
