@@ -8,4 +8,3 @@ venv/
 
 # Node（ai-training）
 node_modules/
-ai-training/alpha_model/

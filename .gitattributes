@@ -1,0 +1,8 @@
+* text=auto
+
+# 在 Linux 訓練機上執行，換行必須維持 LF
+*.sh text eol=lf
+
+# 二進位：不做任何換行轉換
+*.bin binary
+*.mp3 binary
