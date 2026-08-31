@@ -33,9 +33,18 @@ CC BY 4.0 要求標示出處，署名已放在 `index.html` 的「系統資訊�
 
 | 檔案 | 觸發時機 | 原始檔 |
 |---|---|---|
-| `piece-move.ogg` | 棋子開始移動（`startMove()`），音量 0.40 | `chip-lay-1` — Casino Audio |
-| `wall-build.ogg` | 牆蓋起來（`walls.set()`），四面牆收網時依序錯開 90ms，音量 0.55 | `impactWood_medium_000` — Impact Sounds |
-| `wall-break.ogg` | 破牆（`smashWall()`），音量 1.00 —— 全場最重的一下 | `impactMining_000` — Impact Sounds |
+| `piece-move.ogg` | 棋子開始移動（`startMove()`），增益 0.55 | `chip-lay-1` — Casino Audio |
+| `wall-build.ogg` | 牆蓋起來（`walls.set()`），四面牆收網時依序錯開 90ms，增益 0.95 | `impactWood_medium_000` — Impact Sounds |
+| `wall-break.ogg` | 破牆（`smashWall()`），增益 3.20 —— 全場最重的一下 | `impactMining_000` — Impact Sounds |
+
+「增益」不是 `HTMLAudioElement.volume`（上限 1，破牆聲再怎麼調也大不過其他音）。
+`routeSfx()` 會在使用者第一次互動時把三個音效接到 Web Audio：各自一顆 `GainNode`
+（可以大於 1），再一起經過一顆 `DynamicsCompressorNode` 當限幅器，
+所以增益拉到 3.2 是變結實而不是破音。瀏覽器不支援 Web Audio 時退回 `volume`。
+
+注意 `createMediaElementSource()` 每個元素只能呼叫一次，而且接上之後聲音**只**走
+這條路徑 —— `AudioContext` 若停在 `suspended` 就完全沒聲音，因此只在使用者互動
+之後才建立，`playSfx()` 也會在必要時 `resume()`。
 
 全部出自 [Kenney](https://kenney.nl) 的音效包，授權
 [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/)（公共領域，

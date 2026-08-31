@@ -240,11 +240,20 @@ body{
 .auth.intro-play .auth-card{animation:riseIn .95s cubic-bezier(.3,.7,.4,1) .42s both}
 
 /* 登入頁 */
-.intro-gate{position:fixed;left:0;right:0;bottom:13vh;z-index:20;display:none;pointer-events:none;
-  text-align:center;color:var(--cream);font-size:12px;font-weight:700;letter-spacing:.28em;
-  text-shadow:0 2px 8px rgba(60,20,6,.55);animation:gatePulse 1.9s ease-in-out infinite}
-.intro-gate.on{display:block}
-@keyframes gatePulse{0%,100%{opacity:.45}50%{opacity:1}}
+.intro-gate{position:fixed;left:50%;top:50%;translate:-50% -50%;z-index:20;display:none;
+  width:98px;height:98px;padding:0;border-radius:50%;border:4px solid var(--outline);
+  background:var(--red);cursor:pointer;place-items:center;
+  box-shadow:0 8px 0 -1px rgba(60,20,6,.45),0 16px 30px rgba(60,20,6,.4);
+  transition:background .16s,scale .14s}
+.intro-gate.on{display:grid}
+.intro-gate svg{width:40px;height:40px;fill:var(--cream-hi);margin-left:6px}
+.intro-gate:hover{background:var(--orange-hi);scale:1.06}
+.intro-gate:active{scale:.96}
+/* 往外擴散的脈動環，提示這顆是可以按的 */
+.intro-gate::after{content:'';position:absolute;inset:-4px;border-radius:50%;
+  border:4px solid var(--red);pointer-events:none;
+  animation:gatePulse 1.8s cubic-bezier(.2,.6,.4,1) infinite}
+@keyframes gatePulse{0%{transform:scale(1);opacity:.75}100%{transform:scale(1.6);opacity:0}}
 
 .auth{position:fixed;inset:0;display:none;place-items:center;padding:20px;z-index:15;overflow-y:auto}
 .auth.on{display:grid}
@@ -669,7 +678,9 @@ body{
   </div>
 </div>
 
-<div class="intro-gate" id="intro-gate">點擊任何一處開始</div>
+<button class="intro-gate" id="intro-gate" title="開始" aria-label="開始">
+  <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+</button>
 
 <div class="toast" id="toast"></div>
 
@@ -696,17 +707,53 @@ function stopMusic(){ bgmEl.pause(); }
 
 /* 音效：Kenney 的 CC0 音效包，跟著背景對局動畫觸發。
    與背景音樂共用同一顆 🔈 開關。 */
+/* gain 是 Web Audio 的增益：HTMLAudioElement 的 volume 上限是 1，
+   破牆聲要比其他音明顯更重就必須走 GainNode（可以大於 1）。 */
 const SFX = {
-  move:  { src: 'assets/sfx/piece-move.ogg', vol: 0.40 },   /* 圓柱棋子落定 */
-  wall:  { src: 'assets/sfx/wall-build.ogg', vol: 0.55 },   /* 木板立起 */
-  break: { src: 'assets/sfx/wall-break.ogg', vol: 1.00 },   /* 重擊破牆 —— 全場最重的一下 */
+  move:  { src: 'assets/sfx/piece-move.ogg', gain: 0.55 },   /* 圓柱棋子落定 */
+  wall:  { src: 'assets/sfx/wall-build.ogg', gain: 0.95 },   /* 木板立起 */
+  break: { src: 'assets/sfx/wall-break.ogg', gain: 3.20 },   /* 重擊破牆 —— 全場最重的一下 */
 };
 const sfxEls = {};
-for (const [name, { src, vol }] of Object.entries(SFX)) {
+for (const [name, { src, gain }] of Object.entries(SFX)) {
   const a = new Audio(src);
   a.preload = 'auto';
-  a.volume = vol;
+  a.volume = Math.min(gain, 1);   /* Web Audio 不可用時的退路 */
   sfxEls[name] = a;
+}
+
+/* 把音效接到 Web Audio 上：各自 GainNode 放大，再經過一顆限幅器，
+   增益超過 1 才不會變成破音而是變得結實。
+   createMediaElementSource 每個元素只能呼叫一次，且接上之後聲音只走這條
+   路徑 —— AudioContext 若處於 suspended 就完全沒聲音，所以只在使用者
+   互動之後才建立。 */
+let sfxCtx = null;
+function routeSfx(){
+  if (sfxCtx) return;
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC) return;                 /* 不支援就沿用上面的 volume */
+  try {
+    sfxCtx = new AC();
+    const limiter = sfxCtx.createDynamicsCompressor();
+    limiter.threshold.value = -6;
+    limiter.knee.value = 4;
+    limiter.ratio.value = 12;
+    limiter.attack.value = 0.002;
+    limiter.release.value = 0.18;
+    limiter.connect(sfxCtx.destination);
+
+    for (const [name, { gain }] of Object.entries(SFX)) {
+      const a = sfxEls[name];
+      const g = sfxCtx.createGain();
+      g.gain.value = gain;
+      sfxCtx.createMediaElementSource(a).connect(g);
+      g.connect(limiter);
+      a.volume = 1;                /* 音量交給 GainNode */
+    }
+  } catch (err) {
+    console.warn('音效無法接上 Web Audio，改用原始音量：', err);
+    sfxCtx = null;
+  }
 }
 
 /* 音效只服務登入前的開場動畫。introStage 在開場結束時被設回 null，
@@ -715,13 +762,14 @@ function playSfx(name){
   if (introStage === null || !musicOn()) return;
   const a = sfxEls[name];
   if (!a) return;
+  if (sfxCtx && sfxCtx.state === 'suspended') sfxCtx.resume();
   a.currentTime = 0;
-  /* 使用者互動前瀏覽器會擋下播放，這裡只能盡力嘗試 */
   a.play().catch(() => {});
 }
 
 ['pointerdown', 'keydown'].forEach(ev =>
-  window.addEventListener(ev, () => startMusic(), { once: true, passive: true }));
+  window.addEventListener(ev, () => { routeSfx(); startMusic(); },
+                          { once: true, passive: true }));
 
 /* ═════════ 背景：Wall Go 對局模擬（棋子移動 + 建牆） ═════════ */
 const cv = document.getElementById('board'), ctx = cv.getContext('2d');
@@ -809,14 +857,28 @@ let shards=[], bursts=[], breakers=[true,true,true,true], lastBreak=-99;
 let introHero=null, armAlpha=0, hammerAng=0, introSmashed=false, shake=0, cageKeys=[];
 let impact=null, NOW=0, introStage=null;
 
-/* 依據距離延遲的震波：越遠越晚跳、越遠幅度越小，並以阻尼彈跳收斂 */
-function joltZ(x, y){
-  if(!impact) return 0;
-  const p = (NOW-impact.t)/1000 - Math.hypot(x-impact.x, y-impact.y)*0.052;
-  if(p<0 || p>1.1) return 0;
+const JOLT_ZERO = { z:0, ox:0, oy:0 };
+/* 座標雜湊：同一格每幀都得到同一組亂數，物件才不會逐幀抖動 */
+function hash01(n){ const v = Math.sin(n)*43758.5453; return v - Math.floor(v); }
+
+/* 依據距離延遲的震波：越遠越晚跳、越遠幅度越小，並以阻尼彈跳收斂。
+   除了往上彈，也沿著「震央 → 物件」的方向推開；每個物件再依座標雜湊
+   取得固定但互不相同的偏轉角與強度，所以不會全部朝同一邊、跳同樣高。 */
+function joltAt(x, y){
+  if(!impact) return JOLT_ZERO;
   const dist = Math.hypot(x-impact.x, y-impact.y);
-  const amp = S*0.78 * Math.exp(-dist*0.20);
-  return Math.abs(Math.sin(p*13)) * Math.exp(-p*3.6) * amp;
+  const p = (NOW-impact.t)/1000 - dist*0.052;
+  if(p<0 || p>1.15) return JOLT_ZERO;
+
+  const h1 = hash01(x*12.9898 + y*78.233);    /* 決定跳多高 */
+  const h2 = hash01(x*39.3468 + y*11.135);    /* 決定往哪偏 */
+
+  const decay = Math.exp(-dist*0.20) * Math.exp(-p*3.4);
+  const z = Math.abs(Math.sin(p*13)) * decay * S*1.25 * (0.65 + h1*0.85);
+
+  const ang  = Math.atan2(y-impact.y, x-impact.x) + (h2-0.5)*1.9;   /* ±0.95 rad */
+  const push = Math.sin(Math.min(p,1)*Math.PI) * decay * (0.26 + h1*0.30);
+  return { z, ox: Math.cos(ang)*push, oy: Math.sin(ang)*push };
 }
 const REST_ANG=-0.35, RAISE_ANG=-2.45, SLAM_ANG=0.62;
 const HAS_SESSION = !!localStorage.getItem('wallGoSession');
@@ -1082,19 +1144,21 @@ function drawWall(key, info, now){
   if(phase==='reset') h*=1-fade;
   if(h<=0.5) return;
   const t=0.075, col=C.p[info.p];
-  const lift = d==='H' ? joltZ(x+0.5,y) : joltZ(x,y+0.5);
+  const j = d==='H' ? joltAt(x+0.5,y) : joltAt(x,y+0.5);
   /* 長度剛好一格，不外推，才不會比棋盤格還寬 */
-  if(d==='H') box(x,y-t,x+1,y+t,h,col.wallSide,col.wall,lift);
-  else box(x-t,y,x+t,y+1,h,col.wallSide,col.wall,lift);
+  if(d==='H') box(x+j.ox,y-t+j.oy,x+1+j.ox,y+t+j.oy,h,col.wallSide,col.wall,j.z);
+  else box(x-t+j.ox,y+j.oy,x+t+j.ox,y+1+j.oy,h,col.wallSide,col.wall,j.z);
 }
 
 function drawPiece(pc){
   const rx=S*.26, ry=rx*SQUASH, h=S*.40;
-  const lift=joltZ(pc.dx+.5, pc.dy+.5);
-  const g=proj(pc.dx+.5,pc.dy+.5);            /* 地面位置（影子） */
-  const c=proj(pc.dx+.5,pc.dy+.5,lift);       /* 被震起後的位置 */
+  /* 揮槌的人不該被自己那一下震飛，否則棋子會跟手上的槌子脫節 */
+  const j = pc===introHero ? JOLT_ZERO : joltAt(pc.dx+.5, pc.dy+.5);
+  const lift=j.z, gx=pc.dx+.5+j.ox, gy=pc.dy+.5+j.oy;
+  const g=proj(gx,gy);                        /* 地面位置（影子） */
+  const c=proj(gx,gy,lift);                   /* 被震起後的位置 */
   const col=C.p[pc.p];
-  const k=1-Math.min(lift/(S*0.80),0.60);     /* 飛越高，影子越小越淡 */
+  const k=1-Math.min(lift/(S*1.30),0.62);     /* 飛越高，影子越小越淡 */
   ctx.save(); ctx.globalAlpha=.22*k; ctx.fillStyle='#16253d';
   ctx.beginPath(); ctx.ellipse(g.X+S*.06,g.Y+S*.03,rx*1.12*k,ry*1.1*k,0,0,7); ctx.fill(); ctx.restore();
   /* 柱身（含描邊） */
