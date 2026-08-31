@@ -891,9 +891,10 @@ let shards=[], bursts=[], breakers=[true,true,true,true], lastBreak=-99;
 let introHero=null, armAlpha=0, hammerAng=0, introSmashed=false, shake=0, cageKeys=[];
 let impact=null, NOW=0, introStage=null;
 
-/* 牆的立體厚度與半厚（單位：格）。WALL_H 必須小於 2*WALL_T，
-   否則 drawWall 的補償會把橫牆的 footprint 壓成負值。 */
-const WALL_H = 0.14, WALL_T = 0.13;
+/* 牆的立體厚度與 footprint 半厚（單位：格）——沿用改動前的比例。
+   兩個方向都是 footprint 2*WALL_T 厚 × 1 格長，再擠出 WALL_H，
+   視覺尺寸同為 (2*WALL_T + WALL_H) × 1 格。 */
+const WALL_H = 0.30, WALL_T = 0.075;
 
 const JOLT_ZERO = { z:0, ox:0, oy:0 };
 /* 座標雜湊：同一格每幀都得到同一組亂數，物件才不會逐幀抖動 */
@@ -1163,9 +1164,15 @@ function drawBoard(){
   poly(c); ctx.strokeStyle='rgba(19,41,75,.55)'; ctx.lineWidth=2; ctx.stroke();
 }
 
-function box(bx0,by0,bx1,by1,h,side,top,base=0){
+/* h 為立體厚度（像素）。axis 決定往哪個方向擠出：
+   'y' 往螢幕上方，'x' 往螢幕左方。光源在左上，所以兩者的暗面都落在右下。
+   直牆改往側邊擠出，兩個方向的牆才是同一個形狀轉 90 度。 */
+function box(bx0,by0,bx1,by1,h,side,top,base=0,axis='y'){
+  const dx = axis==='x' ? -h/S : 0;
+  const dz = axis==='x' ? 0 : h;
   const b=[proj(bx0,by0,base),proj(bx1,by0,base),proj(bx1,by1,base),proj(bx0,by1,base)];
-  const u=[proj(bx0,by0,base+h),proj(bx1,by0,base+h),proj(bx1,by1,base+h),proj(bx0,by1,base+h)];
+  const u=[proj(bx0+dx,by0,base+dz),proj(bx1+dx,by0,base+dz),
+           proj(bx1+dx,by1,base+dz),proj(bx0+dx,by1,base+dz)];
   const faces=[0,1,2,3].map(i=>({q:[b[i],b[(i+1)%4],u[(i+1)%4],u[i]],
     d:(b[i].Y+b[(i+1)%4].Y)/2}));
   faces.sort((a,c)=>a.d-c.d);
@@ -1181,20 +1188,13 @@ function drawWall(key, info, now){
   let h=S*WALL_H*(info.t?easeBack(age):1);
   if(phase==='reset') h*=1-fade;
   if(h<=0.5) return;
-  const col=C.p[info.p];
+  const t=WALL_T, col=C.p[info.p];
   const j = d==='H' ? joltAt(x+0.5,y) : joltAt(x,y+0.5);
-
-  /* 立體擠出只往螢幕上方長，直接畫的話直牆會變成 1+WALL_H 格長、
-     橫牆會變成 2*WALL_T+WALL_H 格厚 —— 同一道牆換個方向就對不齊。
-     把 footprint 反向縮短並下移擠出的量，兩個方向就都剛好是
-     (2*WALL_T) × 1 格，而且外緣仍準確落在格線上。 */
-  const hz = h/S;                                  /* 動畫過程中的實際擠出量（格）*/
-  if(d==='H'){
-    const th = Math.max(WALL_T - hz/2, 0.02);
-    box(x+j.ox, y-th+hz/2+j.oy, x+1+j.ox, y+th+hz/2+j.oy, h, col.wallSide, col.wall, j.z);
-  } else {
-    box(x-WALL_T+j.ox, y+hz+j.oy, x+WALL_T+j.ox, y+1+j.oy, h, col.wallSide, col.wall, j.z);
-  }
+  /* 兩個方向的 footprint 都是「2*WALL_T 厚 × 1 格長」，差別只在擠出方向：
+     橫牆往上、直牆往左。擠出量只加在垂直於牆身的那一軸上，
+     所以兩者的視覺尺寸與明暗比例完全相同，只是轉了 90 度。 */
+  if(d==='H') box(x+j.ox, y-t+j.oy, x+1+j.ox, y+t+j.oy, h, col.wallSide, col.wall, j.z, 'y');
+  else        box(x-t+j.ox, y+j.oy,   x+t+j.ox, y+1+j.oy, h, col.wallSide, col.wall, j.z, 'x');
 }
 
 function drawPiece(pc){
