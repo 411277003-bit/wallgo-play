@@ -1,0 +1,1470 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WALL GO — 對局中</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.js"></script>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Anton&family=Archivo:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap');
+
+        :root {
+            /* ── 平面插畫海報風：橘底 × 米白物件 × 粗黑描邊 ── */
+            --orange: #cf5f28;
+            --orange-deep: #b04d1d;
+            --orange-hi: #e07338;
+            --cream: #f5ead3;
+            --cream-hi: #fbf4e4;
+            --cream-lo: #e6d9bb;
+            --outline: #1b1b1b;
+            --pink: #efa39c;
+            --sky: #7db8dd;
+            --blue: #4a92c4;
+            --green: #7fa93f;
+            --yellow: #f2c14a;
+            --red: #d94f2b;
+            --board-light: #f8f0dc;
+
+            /* 沿用舊變數名稱（JS 內嵌樣式會用到） */
+            --bg-color: #cf5f28;
+            --card-border: #1b1b1b;
+            --text-main: #1b1b1b;
+            --text-sub: #6b6659;
+            --primary: #b04d1d;
+            --btn-beige: #e6d9bb;
+            --ink: #1b1b1b;
+
+            --color-red: #d94f2b;
+            --color-blue: #4a92c4;
+            --color-yellow: #f2c14a;
+            --color-green: #7fa93f;
+
+            --font-serif: 'Anton', 'Archivo', 'Noto Sans TC', sans-serif;
+            --font-sans: 'Archivo', 'Noto Sans TC', 'Microsoft JhengHei', sans-serif;
+            --bw: 2.5px;
+        }
+
+        * { box-sizing: border-box; }
+        html { background: var(--orange); }
+
+        body {
+            font-family: var(--font-sans);
+            font-weight: 400;
+            line-height: 1.6;
+            letter-spacing: .015em;
+            display: flex;
+            flex-direction: row;
+            justify-content: center;
+            align-items: center;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            padding: 20px 34px;
+            height: 100vh;
+            height: 100dvh;
+            box-sizing: border-box;
+            overflow: hidden;
+            gap: 20px;
+        }
+
+        /* 背景層次與顆粒 */
+        .vignette {
+            position: fixed; inset: 0; pointer-events: none; z-index: 0;
+            background:
+              radial-gradient(95% 75% at 50% 30%, rgba(224,115,56,.5) 0%, rgba(207,95,40,0) 62%),
+              radial-gradient(120% 95% at 50% 55%, rgba(0,0,0,0) 48%, rgba(120,50,16,.24) 84%, rgba(96,40,12,.36) 100%);
+        }
+        .grain {
+            position: fixed; inset: -50%; pointer-events: none; z-index: 0;
+            opacity: .11; mix-blend-mode: multiply;
+            background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/></filter><rect width='140' height='140' filter='url(%23n)' opacity='.55'/></svg>");
+        }
+        .left-sidebar, .board-container, .right-spacer { position: relative; z-index: 1; }
+
+        .left-sidebar {
+            display: flex;
+            flex-direction: column;
+            width: 240px;
+            flex-shrink: 0;
+            gap: 14px;
+            height: 100%;
+            justify-content: center;
+            min-height: 0;
+        }
+
+        .status-panel {
+            text-align: center;
+            padding: 18px 16px;
+            background: var(--cream-hi);
+            border-radius: 24px;
+            border: 3px solid var(--outline);
+            width: 100%;
+            box-sizing: border-box;
+        }
+        .status-panel h2 {
+            margin: 0 0 7px 0; font-family: var(--font-sans); font-size: 17px; font-weight: 700;
+            letter-spacing: .03em; line-height: 1.35; color: var(--outline);
+        }
+        .status-panel p { margin: 0; color: var(--text-sub); font-size: 12.5px; font-weight: 400; line-height: 1.7; letter-spacing: .03em; }
+
+        #online-identity-display { font-size: 10.5px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; color: var(--orange-deep); margin-top: 7px; }
+
+        .timer-wrapper {
+            margin-top: 14px; padding: 10px; border-radius: 18px;
+            border: 2px solid var(--outline); background: var(--cream);
+        }
+        .timer-container { display: flex; flex-direction: column; gap: 6px; align-items: stretch; }
+        .timer-box {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 8px 12px; border-radius: 999px; font-weight: 500; font-size: 12.5px;
+            letter-spacing: .03em; background: transparent; border: 2px solid transparent;
+            transition: all .2s; color: var(--text-sub); font-variant-numeric: tabular-nums;
+        }
+        .timer-active {
+            background: var(--yellow); border-color: var(--outline); color: var(--outline); font-weight: 700;
+        }
+        .dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 8px;
+            border: 2px solid var(--outline); box-sizing: border-box; }
+
+        .breaker-status { font-size: 11.5px; color: var(--text-sub); margin-top: 12px; line-height: 1.7; font-weight: 400; }
+
+        .controls { display: flex; flex-direction: column; gap: 10px; width: 100%; }
+        .controls button { display: flex; align-items: center; gap: 11px; text-align: left; }
+        .controls button span { flex: 1; }
+        .bico { width: 21px; height: 21px; flex: 0 0 21px; fill: currentColor; }
+        .bico .stroked { fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+        .bico .spark { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+        button {
+            width: 100%; padding: 13px 15px; font-size: 14px; font-weight: 600; border: var(--bw) solid var(--outline);
+            border-radius: 16px; cursor: pointer; transition: .16s; font-family: var(--font-sans);
+            letter-spacing: .05em; background: var(--cream-hi); color: var(--outline);
+        }
+        button:hover { background: var(--cream-lo); transform: translateY(-2px); }
+        button:active { transform: translateY(1px); }
+
+        #btn-breaker { background: var(--cream-lo); color: #a8a396; border-color: rgba(27,27,27,.3); cursor: not-allowed; }
+        #btn-breaker:hover { transform: none; background: var(--cream-lo); }
+        #btn-breaker:not(:disabled) {
+            cursor: pointer; background: var(--red); color: var(--cream-hi); font-weight: 700;
+            border-color: var(--outline);
+        }
+        #btn-breaker:not(:disabled):hover { background: #e5613e; transform: translateY(-2px); }
+
+        #btn-reset { background: var(--yellow); font-weight: 700; }
+        #btn-reset:hover { background: #f7ce62; }
+        .btn-back { background: var(--cream); color: var(--text-sub); }
+        .btn-back:hover { background: var(--sky); color: var(--outline); }
+
+        /* 棋盤置中 */
+        .board-container {
+            flex: 1 1 auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            min-width: 0;
+        }
+
+        .board {
+            width: min(85vh, 100%);
+            aspect-ratio: 1 / 1;
+            height: auto;
+            max-height: 100%;
+            background: var(--cream-lo);
+            padding: 14px;
+            border-radius: 28px;
+            border: 4px solid var(--outline);
+            display: grid;
+            grid-template-columns: repeat(6, 1fr 0.25fr) 1fr;
+            grid-template-rows: repeat(6, 1fr 0.25fr) 1fr;
+            box-sizing: border-box;
+            flex-shrink: 0;
+        }
+
+        .grid-item { display: flex; justify-content: center; align-items: center; transition: background-color .2s; }
+        .cell { background-color: var(--board-light); border-radius: 9px; cursor: pointer;
+            box-shadow: inset 0 0 0 2.5px var(--outline); }
+        .cell:hover { background-color: var(--yellow); }
+        .wall-h, .wall-v { cursor: pointer; border-radius: 4px; }
+        .intersection { background-color: transparent; }
+
+        .piece {
+            border-radius: 50%; width: 76%; height: 76%;
+            border: 3px solid var(--outline);
+            box-sizing: border-box;
+            transition: transform .2s; pointer-events: none;
+        }
+        .piece-red { background-color: var(--color-red); }
+        .piece-blue { background-color: var(--color-blue); }
+        .piece-yellow { background-color: var(--color-yellow); }
+        .piece-green { background-color: var(--color-green); }
+
+        .wall-placed { cursor: default; }
+        .wall-red { background-color: var(--color-red) !important; border-radius: 4px; }
+        .wall-blue { background-color: var(--color-blue) !important; border-radius: 4px; }
+        .wall-yellow { background-color: var(--color-yellow) !important; border-radius: 4px; }
+        .wall-green { background-color: var(--color-green) !important; border-radius: 4px; }
+
+        .territory-red { background-color: rgba(217, 79, 43, .42) !important; }
+        .territory-blue { background-color: rgba(74, 146, 196, .42) !important; }
+        .territory-yellow { background-color: rgba(242, 193, 74, .55) !important; }
+        .territory-green { background-color: rgba(127, 169, 63, .42) !important; }
+
+        .highlight { background-color: var(--sky) !important; cursor: pointer; border-radius: 9px;
+            box-shadow: inset 0 0 0 3px var(--outline); }
+        .highlight-wall { background-color: var(--pink) !important; cursor: pointer; border-radius: 4px;
+            box-shadow: inset 0 0 0 2px var(--outline); }
+        .selected { transform: scale(1.1); box-shadow: 0 0 0 4px var(--yellow), 0 0 0 6.5px var(--outline); }
+
+        .right-spacer { width: 240px; flex-shrink: 0; transition: width .4s cubic-bezier(.175,.885,.32,1.275); }
+        /* 聊天室展開時把右欄撐開，棋盤讓位而不是被蓋住 */
+        body.chat-open .right-spacer { width: 396px; }
+
+        .float-mic-btn {
+            position: fixed;
+            left: 28px;
+            bottom: 28px;
+            background: var(--cream-hi);
+            color: var(--outline);
+            border-radius: 50%;
+            width: 56px;
+            height: 56px;
+            font-size: 24px;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            cursor: pointer;
+            border: 3px solid var(--outline);
+            transition: all .18s;
+            padding: 0;
+        }
+        .float-mic-btn:hover { background: var(--yellow); transform: translateY(-2px); }
+        .float-mic-btn.mic-active {
+            background: var(--green);
+            color: var(--cream-hi);
+            animation: pulse-mic 1.5s infinite;
+        }
+        @keyframes pulse-mic {
+            0% { box-shadow: 0 0 0 0 rgba(127, 169, 63, .55); }
+            70% { box-shadow: 0 0 0 16px rgba(127, 169, 63, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(127, 169, 63, 0); }
+        }
+
+        .chat-toggle-btn {
+            position: fixed;
+            right: 28px;
+            bottom: 28px;
+            border: 3px solid var(--outline);
+            color: var(--outline);
+            background: var(--yellow);
+            border-radius: 999px;
+            padding: 14px 26px;
+            font-size: 14px;
+            font-weight: 700;
+            letter-spacing: .06em;
+            z-index: 1000;
+            width: auto;
+        }
+        .chat-toggle-btn:hover { background: #f7ce62; transform: translateY(-2px); }
+
+        .chat-badge {
+            position: absolute;
+            top: -8px;
+            right: -8px;
+            background-color: var(--red);
+            color: var(--cream-hi);
+            border: 2px solid var(--outline);
+            border-radius: 50%;
+            padding: 3px 8px;
+            font-size: 11px;
+            font-weight: 700;
+            display: none;
+            animation: bounce .4s ease-in-out infinite alternate;
+        }
+        @keyframes bounce { from { transform: translateY(0); } to { transform: translateY(-3px); } }
+
+        .chat-area {
+            position: fixed;
+            right: -440px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 344px;
+            height: min(620px, 92vh);
+            background: var(--cream-hi);
+            border-radius: 26px;
+            border: 3px solid var(--outline);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            z-index: 1001;
+            transition: right .4s cubic-bezier(.175, .885, .32, 1.275);
+        }
+        .chat-area.open { right: 24px; }
+
+        .chat-header {
+            background: var(--outline);
+            padding: 15px;
+            text-align: center;
+            font-weight: 700;
+            color: var(--cream-hi);
+            font-family: var(--font-sans);
+            font-size: 12px;
+            letter-spacing: .2em;
+            text-transform: uppercase;
+            border-bottom: 3px solid var(--outline);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-shrink: 0;
+        }
+        .close-chat-btn {
+            background: transparent;
+            color: var(--cream-hi);
+            padding: 0;
+            font-size: 18px;
+            border: none;
+            width: auto;
+        }
+        .close-chat-btn:hover { color: var(--yellow); transform: none; background: transparent; border: none; }
+
+        .chat-messages {
+            flex: 1 1 auto;
+            min-height: 0;
+            padding: 15px;
+            overflow-y: auto;
+            font-size: 13.5px;
+            display: flex;
+            flex-direction: column;
+            gap: 11px;
+            background: var(--cream-hi);
+        }
+        .chat-messages::-webkit-scrollbar { width: 6px; }
+        .chat-messages::-webkit-scrollbar-thumb { background: var(--cream-lo); border-radius: 9px; }
+        .chat-msg { line-height: 1.65; word-break: break-word; color: var(--outline); font-weight: 400; }
+
+        .chat-quick-btns {
+            display: flex;
+            gap: 8px;
+            padding: 10px 12px;
+            background: var(--cream);
+            border-top: 2px solid var(--outline);
+            overflow-x: auto;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+        .chat-quick-btns::-webkit-scrollbar { height: 5px; }
+        .chat-quick-btns::-webkit-scrollbar-thumb { background: var(--cream-lo); border-radius: 9px; }
+        .quick-btn {
+            background: var(--cream-hi);
+            color: var(--outline);
+            border: 2px solid var(--outline);
+            border-radius: 999px;
+            padding: 7px 13px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: .16s;
+            width: auto;
+        }
+        .quick-btn:hover { background: var(--yellow); transform: translateY(-2px); }
+
+        .chat-input-box {
+            display: flex;
+            padding: 12px;
+            border-top: 2px solid var(--outline);
+            background: var(--cream);
+            align-items: center;
+            flex-shrink: 0;
+        }
+
+        .chat-input-wrapper { position: relative; flex: 1; display: flex; min-width: 0; }
+        .mention-list {
+            position: absolute;
+            bottom: calc(100% + 6px);
+            left: 0;
+            width: 100%;
+            background: #fff;
+            border: 2px solid var(--outline);
+            border-radius: 14px;
+            max-height: 130px;
+            overflow-y: auto;
+            z-index: 10;
+            display: none;
+        }
+        .mention-item {
+            padding: 9px 12px;
+            cursor: pointer;
+            border-bottom: 1px solid rgba(27,27,27,.14);
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--outline);
+        }
+        .mention-item:last-child { border-bottom: none; }
+        .mention-item:hover { background: var(--yellow); }
+
+        .chat-input-box input {
+            width: 100%;
+            padding: 12px;
+            border-radius: 14px;
+            border: 2px solid var(--outline);
+            background: #fff;
+            color: var(--outline);
+            outline: none;
+            font-family: var(--font-sans);
+            font-weight: 400;
+            font-size: 13.5px;
+        }
+        .chat-input-box input:focus { background: var(--cream-hi); }
+        .chat-input-box input::placeholder { color: #a8a396; }
+
+        .chat-input-box button {
+            margin-left: 9px;
+            padding: 12px 18px;
+            background: var(--red);
+            color: var(--cream-hi);
+            border-radius: 14px;
+            border: 2px solid var(--outline);
+            cursor: pointer;
+            font-weight: 700;
+            letter-spacing: .06em;
+            width: auto;
+            flex-shrink: 0;
+        }
+        .chat-input-box button:hover { background: #e5613e; transform: translateY(-2px); }
+
+        .mention-highlight {
+            background-color: var(--sky);
+            color: var(--outline);
+            padding: 2px 8px;
+            border-radius: 999px;
+            font-weight: 700;
+            border: 1.5px solid var(--outline);
+        }
+
+        /* 螢幕較矮時縮一號 */
+        @media (max-height: 720px) {
+            body { padding: 14px 24px; }
+            .left-sidebar, .right-spacer { width: 214px; }
+            .status-panel { padding: 13px; }
+            .status-panel h2 { font-size: 15.5px; }
+            button { padding: 11px 13px; font-size: 13.5px; }
+            .chat-area { height: 92vh; }
+        }
+
+        @media (max-width: 900px) {
+            body { flex-direction: column; padding: 12px; gap: 15px; overflow-y: auto; overflow-x: hidden; height: auto; min-height: 100vh; justify-content: flex-start; }
+            .left-sidebar { width: 100%; max-width: 600px; height: auto; }
+            .right-spacer { display: none; }
+            body.chat-open .right-spacer { width: 0; }
+            .timer-container { flex-direction: row; flex-wrap: wrap; justify-content: center; gap: 6px; }
+            .timer-box { flex: 1; min-width: 45%; justify-content: center; }
+            .controls { flex-direction: row; flex-wrap: wrap; gap: 8px; }
+            .controls button { flex: 1; min-width: 30%; padding: 12px 8px; font-size: 13px; justify-content: center; gap: 8px; }
+            .controls button span { flex: 0 1 auto; }
+            .board-container { width: 100%; max-width: 100%; padding-bottom: 88px; }
+            .board { width: min(94vw, 500px); }
+            .chat-area { width: min(88vw, 380px); right: -100vw; height: 80vh; z-index: 2000; }
+            .chat-area.open { right: 10px; }
+            .chat-toggle-btn { bottom: 15px; right: 15px; padding: 12px 20px; font-size: 13px; z-index: 1999; }
+            .float-mic-btn { bottom: 15px; left: 15px; width: 50px; height: 50px; font-size: 22px; z-index: 1999; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="vignette"></div>
+    <div class="grain"></div>
+
+    <div class="left-sidebar">
+        <div class="status-panel">
+            <h2 id="turn-display">當前回合：載入中...</h2>
+            <p id="instruction-display">請執行動作</p>
+            <div id="online-identity-display" style="display:none;"></div>
+            
+            <div class="timer-wrapper">
+                <div id="timer-container" class="timer-container"></div>
+            </div>
+            
+            <div id="breaker-display" class="breaker-status"></div>
+        </div>
+
+        <div class="controls">
+            <button id="btn-breaker" onclick="toggleWallBreaker()" title="使用破牆">
+                <svg class="bico" viewBox="0 0 24 24"><path d="M3 8h7v4H3zM14 8h7v4h-7zM3 14h18v4H3z"/><path d="M12.4 2.6l-1.6 3.2 2.4.7-2 3.4" class="spark"/></svg>
+                <span>使用破牆</span>
+            </button>
+            <button id="btn-reset" onclick="resetGame(true)" title="重新開始">
+                <svg class="bico" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.6-5.9" class="stroked"/><path d="M20 3v5h-5" class="stroked"/></svg>
+                <span>重新開始</span>
+            </button>
+            <button class="btn-back" onclick="backToMenu()" title="回主選單">
+                <svg class="bico" viewBox="0 0 24 24"><path d="M4 11.5 12 5l8 6.5" class="stroked"/><path d="M6.5 10.5V19h11v-8.5" class="stroked"/><path d="M10 19v-4.5h4V19" class="stroked"/></svg>
+                <span>回主選單</span>
+            </button>
+        </div>
+        
+        <div id="audio-container" style="display:none;"></div>
+    </div>
+
+    <div class="board-container">
+        <div id="game-board" class="board"></div>
+    </div>
+
+    <div class="right-spacer"></div>
+
+    <button id="float-mic-btn" class="float-mic-btn" onclick="toggleMic()" title="開啟/關閉語音">🎤</button>
+
+    <button class="chat-toggle-btn" onclick="toggleChat()">
+        💬 展開聊天室
+        <span id="chat-badge" class="chat-badge">!</span>
+    </button>
+
+    <div class="chat-area" id="chat-area">
+        <div class="chat-header">
+            <span>💬 遊戲聊天室</span>
+            <button class="close-chat-btn" onclick="toggleChat()">✖</button>
+        </div>
+        <div class="chat-messages" id="chat-messages">
+            <div class="chat-msg" style="color: var(--text-sub); text-align: center; font-size: 13px;">歡迎來到房間，打個招呼吧！</div>
+        </div>
+        
+        <div class="chat-quick-btns">
+            <button class="quick-btn" onclick="sendQuickMsg('👋 你好！')">👋</button>
+            <button class="quick-btn" onclick="sendQuickMsg('😎 這局穩了！')">😎</button>
+            <button class="quick-btn" onclick="sendQuickMsg('😱 阿幹按錯！')">😱</button>
+            <button class="quick-btn" onclick="sendQuickMsg('🐮 牛喔放這裡！')">🐮</button>
+            <button class="quick-btn" onclick="sendQuickMsg('🤔 讓我想想...')">🤔</button>
+            <button class="quick-btn" onclick="sendQuickMsg('🔥 太神啦！')">🔥</button>
+            <button class="quick-btn" onclick="sendQuickMsg('⏱️ 快點下棋啦！')">⏱️</button>
+            <button class="quick-btn" onclick="sendQuickMsg('😭 完蛋了...')">😭</button>
+        </div>
+
+        <div class="chat-input-box">
+            <div class="chat-input-wrapper">
+                <div id="mention-list" class="mention-list"></div>
+                <input type="text" id="chat-input" placeholder="輸入訊息... (@標記對手)">
+            </div>
+            <button onclick="sendChat()">發送</button>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'https://wallgo-play.onrender.com';
+        const boardSize = 13; 
+        let phase = 'placement'; 
+        
+        const urlParams = new URLSearchParams(window.location.search);
+        const paramPlayers = urlParams.get('players');
+        const mode = urlParams.get('mode'); 
+        const roomCode = urlParams.get('room'); 
+        
+        const isVsAI = (paramPlayers === 'ai'); 
+        let playerCount = isVsAI ? 2 : (parseInt(paramPlayers) || 3);
+        let aiColor = isVsAI ? 'blue' : null;
+        let isProcessing = false; 
+
+        let socket = null;
+        let myOnlineColor = null; 
+        let session = JSON.parse(localStorage.getItem('wallGoSession'));
+
+        const allColors = ['red', 'blue', 'yellow', 'green'];
+        let activeColors = [];
+        let placementQueue = [];
+        let movementOrder = [];
+        let turnIndex = 0;
+        let pieces = []; 
+        let walls = new Map(); 
+        let playersInfo = {};
+        let stepsTaken = 0;
+        let territories = new Map(); 
+        
+        const TURN_TIME_LIMIT = 90; 
+        let playerTimes = {}; 
+        let clockInterval = null;
+        let selectedPieceIndex = -1; 
+        let movedPieceIndex = -1; 
+
+        let moveHistory = []; 
+
+        let colorToName = {};
+
+        const boardEl = document.getElementById('game-board');
+        const turnDisplay = document.getElementById('turn-display');
+        const instructionDisplay = document.getElementById('instruction-display');
+        const timerContainer = document.getElementById('timer-container');
+        const breakerDisplay = document.getElementById('breaker-display');
+        const btnBreaker = document.getElementById('btn-breaker');
+
+        const colorMap = {
+            'red': { color: 'var(--color-red)', icon: '🔴', text: '紅色' },
+            'blue': { color: 'var(--color-blue)', icon: '🔵', text: '藍色' },
+            'yellow': { color: 'var(--color-yellow)', icon: '🟡', text: '黃色' },
+            'green': { color: 'var(--color-green)', icon: '🟢', text: '綠色' }
+        };
+
+        if (mode !== 'online') {
+            colorToName['red'] = session ? session.name : '玩家1';
+            if (isVsAI) colorToName['blue'] = '電腦 AI';
+            else {
+                colorToName['blue'] = '玩家2';
+                colorToName['yellow'] = '玩家3';
+                colorToName['green'] = '玩家4';
+            }
+        }
+
+        function saveHistoryStep() {
+            moveHistory.push({
+                pieces: JSON.parse(JSON.stringify(pieces)),
+                walls: Array.from(walls.entries())
+            });
+        }
+
+        if (mode === 'online') {
+            socket = io(API_URL);
+            socket.emit('join_game_room', { room_code: roomCode, user_id: session.id });
+
+            socket.on('init_game', (data) => {
+                myOnlineColor = data.my_color;
+                if (data.room_players) colorToName = data.room_players;
+                updateUI();
+                
+                document.getElementById('float-mic-btn').style.display = 'flex';
+
+                if (myOnlineColor !== 'red') {
+                    setTimeout(() => {
+                        socket.emit('send_chat', { room_code: roomCode, user_name: '系統', color: 'yellow', message: '🔄 新玩家加入，請求同步狀態...' });
+                    }, 500);
+                }
+            });
+
+            socket.on('update_board', (data) => {
+                pieces = data.pieces;
+                walls = new Map(data.walls);
+                territories = new Map(data.territories);
+                phase = data.phase;
+                turnIndex = data.turnIndex;
+                movedPieceIndex = data.movedPieceIndex;
+                selectedPieceIndex = data.selectedPieceIndex;
+                stepsTaken = data.stepsTaken;
+                playersInfo = data.playersInfo;
+                playerTimes = data.playerTimes;
+                
+                saveHistoryStep();
+                render();
+                autoCheckEndGame(false); 
+            });
+
+            socket.on('receive_chat', (data) => {
+                if (data.message.startsWith('[SYS_PEER_ID]:')) {
+                    if (isMicOn && data.color !== myOnlineColor) {
+                        const remotePeerId = data.message.split(':')[1];
+                        if (myPeer) {
+                            const call = myPeer.call(remotePeerId, localStream);
+                            handleCallStream(call);
+                        }
+                    }
+                    return; 
+                }
+
+                appendChatMessage(data.user_name, data.color, data.message);
+                
+                if (data.message === '🔄 新玩家加入，請求同步狀態...' && myOnlineColor === 'red') {
+                    broadcastGameState();
+                }
+            });
+        }
+
+        function toggleChat() {
+            const chatArea = document.getElementById('chat-area');
+            chatArea.classList.toggle('open');
+            document.body.classList.toggle('chat-open', chatArea.classList.contains('open'));
+            if (chatArea.classList.contains('open')) {
+                document.getElementById('chat-badge').style.display = 'none';
+            }
+        }
+
+        const chatInput = document.getElementById('chat-input');
+        const mentionList = document.getElementById('mention-list');
+
+        chatInput.addEventListener('input', (e) => {
+            const val = chatInput.value;
+            const lastAt = val.lastIndexOf('@');
+            
+            if (lastAt !== -1 && !val.includes(' ', lastAt)) {
+                showMentionList(val.substring(lastAt + 1).toLowerCase());
+            } else {
+                hideMentionList();
+            }
+        });
+
+        function showMentionList(query) {
+            mentionList.innerHTML = '';
+            let hasMatches = false;
+            
+            Object.values(colorToName).forEach(name => {
+                if (name.toLowerCase().includes(query)) {
+                    hasMatches = true;
+                    const div = document.createElement('div');
+                    div.className = 'mention-item';
+                    div.innerText = `@${name}`;
+                    div.onclick = () => {
+                        const val = chatInput.value;
+                        const lastAt = val.lastIndexOf('@');
+                        chatInput.value = val.substring(0, lastAt) + `@${name} `;
+                        hideMentionList();
+                        chatInput.focus();
+                    };
+                    mentionList.appendChild(div);
+                }
+            });
+            mentionList.style.display = hasMatches ? 'block' : 'none';
+        }
+
+        function hideMentionList() { mentionList.style.display = 'none'; }
+
+        function sendQuickMsg(msg) {
+            let myName = session ? session.name : '玩家';
+            let myColor = myOnlineColor || 'red';
+            appendChatMessage(myName, myColor, msg);
+            if (mode === 'online') socket.emit('send_chat', { room_code: roomCode, user_name: myName, color: myColor, message: msg });
+        }
+
+        function sendChat() {
+            const msg = chatInput.value.trim();
+            if(!msg) return;
+
+            let myName = session ? session.name : '玩家';
+            let myColor = myOnlineColor || 'red';
+            
+            appendChatMessage(myName, myColor, msg);
+            if (mode === 'online') socket.emit('send_chat', { room_code: roomCode, user_name: myName, color: myColor, message: msg });
+            
+            chatInput.value = '';
+            hideMentionList();
+        }
+
+        chatInput.addEventListener('keypress', function (e) {
+            if (e.key === 'Enter') sendChat();
+        });
+
+        function appendChatMessage(name, color, msg) {
+            const box = document.getElementById('chat-messages');
+            const colorHex = colorMap[color] ? colorMap[color].color : 'var(--text-main)';
+            
+            let myName = session ? session.name : '';
+            if (myName && msg.includes(`@${myName}`)) {
+                const regex = new RegExp(`@${myName}`, 'g');
+                msg = msg.replace(regex, `<span class="mention-highlight">@${myName}</span>`);
+            }
+
+            box.innerHTML += `<div class="chat-msg"><strong style="color:${colorHex}">${name}:</strong> ${msg}</div>`;
+            box.scrollTop = box.scrollHeight;
+            
+            const chatArea = document.getElementById('chat-area');
+            if (!chatArea.classList.contains('open') && name !== myName && name !== '系統') {
+                document.getElementById('chat-badge').style.display = 'block';
+            }
+        }
+
+        function broadcastGameState() {
+            if (mode !== 'online') return;
+            socket.emit('game_action', {
+                room_code: roomCode,
+                pieces: pieces,
+                walls: Array.from(walls.entries()), 
+                territories: Array.from(territories.entries()),
+                phase: phase,
+                turnIndex: turnIndex,
+                movedPieceIndex: movedPieceIndex,
+                selectedPieceIndex: selectedPieceIndex,
+                stepsTaken: stepsTaken,
+                playersInfo: playersInfo,
+                playerTimes: playerTimes
+            });
+        }
+
+        function getDisplayName(colorCode) {
+            let name = colorToName[colorCode] || colorMap[colorCode].text;
+            if (name.length > 6) name = name.substring(0, 5) + '..'; 
+            return name;
+        }
+
+        function backToMenu() { window.location.href = 'index.html'; }
+
+        function resetGame(e) {
+            let isManual = (e instanceof Event) || e === true;
+            
+            if (clockInterval) clearInterval(clockInterval);
+            activeColors = allColors.slice(0, playerCount);
+            placementQueue = [...activeColors, ...[...activeColors].reverse()];
+            movementOrder = [...activeColors];
+            pieces = []; walls.clear(); territories.clear(); playersInfo = {}; playerTimes = {};
+            
+            activeColors.forEach(c => {
+                playersInfo[c] = { hasBreaker: true };
+                playerTimes[c] = TURN_TIME_LIMIT;
+            });
+
+            phase = 'placement'; turnIndex = 0; selectedPieceIndex = -1; movedPieceIndex = -1; stepsTaken = 0; 
+            isProcessing = false;
+            initBoard();
+
+            moveHistory = [];
+            saveHistoryStep();
+
+            startClock(); 
+            checkAITurn(); 
+            
+            if (mode === 'online' && isManual) {
+                broadcastGameState();
+                appendChatMessage('系統', 'yellow', '🔄 已重新開始新的一局！');
+                socket.emit('send_chat', { room_code: roomCode, user_name: '系統', color: 'yellow', message: '🔄 已重新開始新的一局！' });
+            }
+        }
+
+        function initBoard() {
+            boardEl.innerHTML = '';
+            for (let r = 0; r < boardSize; r++) {
+                for (let c = 0; c < boardSize; c++) {
+                    const div = document.createElement('div');
+                    div.classList.add('grid-item'); div.dataset.r = r; div.dataset.c = c;
+                    if (r % 2 === 0 && c % 2 === 0) {
+                        div.classList.add('cell'); div.onclick = () => handleCellClick(r, c);
+                    } else if (r % 2 !== 0 && c % 2 === 0) {
+                        div.classList.add('wall-h'); div.onclick = () => handleWallClick(r, c);
+                    } else if (r % 2 === 0 && c % 2 !== 0) {
+                        div.classList.add('wall-v'); div.onclick = () => handleWallClick(r, c);
+                    } else div.classList.add('intersection');
+                    boardEl.appendChild(div);
+                }
+            }
+            render();
+        }
+
+        function startClock() {
+            if (clockInterval) clearInterval(clockInterval);
+            if (phase === 'game_over') return;
+            
+            clockInterval = setInterval(() => {
+                if (phase === 'game_over') {
+                    clearInterval(clockInterval);
+                    return;
+                }
+
+                let currentColor = phase === 'placement' ? placementQueue[turnIndex] : movementOrder[turnIndex];
+
+                playerTimes[currentColor]--;
+                updateUI();
+
+                if (playerTimes[currentColor] === 0) {
+                    let baseName = getDisplayName(currentColor);
+                    let suffix = (mode === 'online' && currentColor === myOnlineColor) || (!mode && currentColor === 'red') ? ' (你)' : (isVsAI && currentColor === aiColor ? ' (AI)' : '');
+
+                    if (mode === 'online') {
+                        if (currentColor === myOnlineColor) {
+                            appendChatMessage('系統', 'yellow', '⏳ 時間耗盡！AI 已介入代為下棋與建牆。');
+                            executeAILogic(currentColor);
+                            broadcastGameState();
+                        }
+                    } else {
+                        appendChatMessage('系統', 'yellow', `⏳ ${baseName}${suffix} 時間耗盡！系統已代為執行。`);
+                        executeAILogic(currentColor);
+                    }
+                } 
+
+                else if (playerTimes[currentColor] === -3 && mode === 'online') {
+                    let nextPlayerIndex = (turnIndex + 1) % (phase === 'placement' ? placementQueue.length : movementOrder.length);
+                    let nextPlayer = phase === 'placement' ? placementQueue[nextPlayerIndex] : movementOrder[nextPlayerIndex];
+                    
+                    if (myOnlineColor === nextPlayer) {
+                        appendChatMessage('系統', 'red', `⚠️ 偵測到 ${getDisplayName(currentColor)} 斷線或無回應，由系統強制接管！`);
+                        executeAILogic(currentColor);
+                        broadcastGameState();
+                    }
+                }
+            }, 1000);
+        }
+
+        function resetCurrentPlayerTimer() {
+            if (phase === 'game_over') return;
+            let currentColor = phase === 'placement' ? placementQueue[turnIndex] : movementOrder[turnIndex];
+            playerTimes[currentColor] = TURN_TIME_LIMIT;
+        }
+
+        function executeAILogic(color) {
+            if (phase === 'movement' && stepsTaken > 0 && selectedPieceIndex !== -1) {
+                movedPieceIndex = selectedPieceIndex;
+                selectedPieceIndex = -1;
+                stepsTaken = 0;
+                phase = 'wall_building';
+            }
+
+            if (phase === 'placement') {
+                let emptyCells = [];
+                for (let r = 0; r < boardSize; r += 2) {
+                    for (let c = 0; c < boardSize; c += 2) {
+                        if (getPieceIndexAt(r, c) === -1) emptyCells.push({r, c});
+                    }
+                }
+                if (emptyCells.length > 0) {
+                    let rand = emptyCells[Math.floor(Math.random() * emptyCells.length)];
+                    pieces.push({ color: placementQueue[turnIndex], r: rand.r, c: rand.c });
+                }
+                turnIndex++;
+                if (turnIndex >= placementQueue.length) { phase = 'movement'; turnIndex = 0; }
+            } else if (phase === 'wall_building') {
+                let possibleWalls = getValidWalls(pieces[movedPieceIndex].r, pieces[movedPieceIndex].c);
+                if (possibleWalls.length > 0) {
+                    let w = possibleWalls[Math.floor(Math.random() * possibleWalls.length)];
+                    walls.set(`${w.r},${w.c}`, color);
+                }
+                movedPieceIndex = -1; selectedPieceIndex = -1; stepsTaken = 0; phase = 'movement';
+                turnIndex = (turnIndex + 1) % movementOrder.length;
+            } else {
+                let myPieces = pieces.map((p, idx) => ({...p, idx})).filter(p => p.color === color);
+                
+                let isTimeoutBreak = (phase === 'wall_breaking');
+                let totalMobility = 0;
+                myPieces.forEach(p => totalMobility += getValidMoves(p.r, p.c).length);
+                
+                let myWalls = Array.from(walls.entries()).filter(([k, v]) => v === color);
+                if (playersInfo[color].hasBreaker && myWalls.length > 0 && (totalMobility <= 2 || isTimeoutBreak)) {
+                    let randomWallKey = myWalls[Math.floor(Math.random() * myWalls.length)][0];
+                    walls.delete(randomWallKey);
+                    playersInfo[color].hasBreaker = false;
+                }
+
+                let bestAction = null;
+                let bestScore = -Infinity;
+
+                myPieces.forEach(p => {
+                    let moves = getValidMoves(p.r, p.c);
+                    moves.forEach(m => {
+                        let oldR = p.r; let oldC = p.c;
+                        p.r = m.r; p.c = m.c; 
+                        let vWalls = getValidWalls(m.r, m.c); 
+                        
+                        vWalls.forEach(w => {
+                            walls.set(`${w.r},${w.c}`, color);
+                            let score = evaluateBoard(color);
+                            score += Math.random() * 0.1; 
+
+                            if (score > bestScore) {
+                                bestScore = score;
+                                bestAction = { pIdx: p.idx, mr: m.r, mc: m.c, wr: w.r, wc: w.c };
+                            }
+                            walls.delete(`${w.r},${w.c}`);
+                        });
+                        p.r = oldR; p.c = oldC; 
+                    });
+                });
+
+                if (bestAction) {
+                    pieces[bestAction.pIdx].r = bestAction.mr;
+                    pieces[bestAction.pIdx].c = bestAction.mc;
+                    walls.set(`${bestAction.wr},${bestAction.wc}`, color);
+                } else {
+                    if (myPieces.length > 0) {
+                        let fallbackP = myPieces[0];
+                        let wMoves = getValidWalls(fallbackP.r, fallbackP.c);
+                        if (wMoves.length > 0) walls.set(`${wMoves[0].r},${wMoves[0].c}`, color);
+                    }
+                }
+                
+                movedPieceIndex = -1; selectedPieceIndex = -1; stepsTaken = 0; phase = 'movement';
+                turnIndex = (turnIndex + 1) % movementOrder.length;
+            }
+
+            saveHistoryStep();
+            resetCurrentPlayerTimer(); 
+            autoCheckEndGame(false); 
+            render();
+            checkAITurn(); 
+        }
+
+        function evaluateBoard(aiColor) {
+            let score = 0;
+            let aiMobility = 0;
+            let oppMobility = 0;
+
+            pieces.forEach(p => {
+                let movesCount = getValidMoves(p.r, p.c).length;
+                if (p.color === aiColor) {
+                    aiMobility += movesCount;
+                    score -= (Math.abs(p.r - 6) + Math.abs(p.c - 6)) * 0.5;
+                } else {
+                    oppMobility += movesCount;
+                }
+            });
+
+            score += (aiMobility * 2.5) - oppMobility;
+            if (aiMobility === 0) score -= 10000;
+            return score;
+        }
+
+        function checkAITurn() {
+            if (phase === 'game_over' || mode === 'online') { isProcessing = false; return; }
+            let currentColor = phase === 'placement' ? placementQueue[turnIndex] : movementOrder[turnIndex];
+            
+            if (isVsAI && currentColor === aiColor) {
+                isProcessing = true; 
+                instructionDisplay.innerText = "🤖 電腦正在思考最佳路徑...";
+                setTimeout(() => {
+                    executeAILogic(currentColor);
+                }, 800);
+            } else {
+                isProcessing = false; 
+            }
+        }
+
+        function render() {
+            let currentColor = phase === 'placement' ? placementQueue[turnIndex] : movementOrder[turnIndex];
+
+            document.querySelectorAll('.grid-item').forEach(el => {
+                el.innerHTML = '';
+                el.classList.remove('highlight', 'highlight-wall', 'wall-placed', 'selected', 'wall-red', 'wall-blue', 'wall-yellow', 'wall-green', 'territory-red', 'territory-blue', 'territory-yellow', 'territory-green');
+            });
+
+            walls.forEach((color, wKey) => {
+                const [wr, wc] = wKey.split(',').map(Number);
+                const wEl = getEl(wr, wc);
+                if (wEl) wEl.classList.add('wall-placed', `wall-${color}`);
+            });
+
+            if (phase === 'game_over') {
+                territories.forEach((color, tKey) => {
+                    const [tr, tc] = tKey.split(',').map(Number);
+                    const tEl = getEl(tr, tc);
+                    if (tEl) tEl.classList.add(`territory-${color}`);
+                });
+            }
+
+            pieces.forEach((p, index) => {
+                const cell = getEl(p.r, p.c);
+                if (cell) {
+                    const pieceDiv = document.createElement('div');
+                    pieceDiv.classList.add('piece', `piece-${p.color}`);
+                    if (index === selectedPieceIndex || index === movedPieceIndex) pieceDiv.classList.add('selected');
+                    cell.appendChild(pieceDiv);
+                }
+            });
+
+            if (phase === 'movement' && selectedPieceIndex !== -1) {
+                const p = pieces[selectedPieceIndex];
+                getValidMoves(p.r, p.c).forEach(m => getEl(m.r, m.c)?.classList.add('highlight'));
+            } else if (phase === 'wall_building') {
+                const p = pieces[movedPieceIndex];
+                getValidWalls(p.r, p.c).forEach(m => getEl(m.r, m.c)?.classList.add('highlight-wall'));
+            } else if (phase === 'wall_breaking') {
+                walls.forEach((color, wKey) => {
+                    if (color === currentColor) {
+                        const [wr, wc] = wKey.split(',').map(Number);
+                        getEl(wr, wc)?.classList.add('highlight-wall');
+                    }
+                });
+            }
+            updateUI();
+        }
+
+        function updateUI() {
+            let currentColor = phase === 'game_over' ? null : (phase === 'placement' ? placementQueue[turnIndex] : movementOrder[turnIndex]);
+            
+            timerContainer.innerHTML = '';
+            activeColors.forEach(c => {
+                const isCurrent = (c === currentColor);
+                const tBox = document.createElement('div');
+                tBox.className = `timer-box ${isCurrent ? 'timer-active' : ''}`;
+                
+                let cName = getDisplayName(c);
+                let displayTime = Math.max(0, playerTimes[c]);
+                
+                tBox.innerHTML = `
+                    <div style="display:flex; align-items:center; flex:1;">
+                        <span class="dot" style="background-color: ${colorMap[c].color};"></span>
+                        <span style="color: ${isCurrent ? 'var(--text-main)' : 'var(--text-sub)'};">${cName}</span>
+                    </div>
+                    <span style="color: ${isCurrent ? colorMap[c].color : 'var(--text-sub)'}; margin-left: 10px;">${displayTime}s</span>
+                `;
+                timerContainer.appendChild(tBox);
+            });
+
+            if (phase === 'game_over') {
+                turnDisplay.innerText = `🏆 遊戲結束`; turnDisplay.style.color = 'var(--text-main)';
+                instructionDisplay.innerText = "領地已完全封閉，請查看結算分數！"; btnBreaker.disabled = true; return;
+            }
+
+            if(isProcessing && isVsAI && currentColor === aiColor) return; 
+
+            let baseName = getDisplayName(currentColor);
+            let suffix = (mode === 'online' && currentColor === myOnlineColor) || (!mode && currentColor === 'red') ? ' (你)' : (isVsAI && currentColor === aiColor ? ' (AI)' : '');
+
+            let phaseText = phase === 'placement' ? '放置階段' : phase === 'movement' ? '移動階段' : phase === 'wall_building' ? '建牆階段 (必須相鄰建牆)' : '破牆階段';
+            turnDisplay.innerText = `當前回合：${baseName}${suffix} (${phaseText})`;
+            turnDisplay.style.color = colorMap[currentColor].color;
+
+            if (phase === 'placement') instructionDisplay.innerText = "請點擊空白棋格放置棋子";
+            else if (phase === 'movement') instructionDisplay.innerText = selectedPieceIndex === -1 ? "請選擇你的棋子，或使用破牆者" : `請點擊高亮綠格移動 (已走 ${stepsTaken} / 2 步)\n若不想繼續移動，請「再次點擊自己的棋子」確認完成`;
+            else if (phase === 'wall_building') instructionDisplay.innerText = "請在剛移動的棋子四周放置一道牆";
+            else if (phase === 'wall_breaking') instructionDisplay.innerText = "請選擇場上一道【你建立的牆壁】將其拆除";
+
+            let statusArray = activeColors.map(c => {
+                let name = getDisplayName(c) + (isVsAI && c === aiColor ? '(AI)' : '');
+                return `${name}(${playersInfo[c].hasBreaker?"可":"無"})`;
+            });
+            breakerDisplay.innerText = `破牆者：` + statusArray.join(" | ");
+            btnBreaker.disabled = (phase !== 'movement' || stepsTaken > 0 || !playersInfo[currentColor].hasBreaker);
+        }
+
+        function checkMyTurn(currentColor) {
+            if (mode === 'online') {
+                if (myOnlineColor === null) { alert("尚未獲取陣營分配，請稍候..."); return false; }
+                if (currentColor !== myOnlineColor) { alert("還沒輪到你喔！請等待對手下棋。"); return false; }
+            }
+            return true;
+        }
+
+        function handleCellClick(r, c) {
+            if (phase === 'game_over' || isProcessing) return; 
+            let currentColor = phase === 'placement' ? placementQueue[turnIndex] : movementOrder[turnIndex];
+            if (isVsAI && currentColor === aiColor) return;
+            if (!checkMyTurn(currentColor)) return;
+
+            let actionMade = false;
+
+            if (phase === 'placement') {
+                if (getPieceIndexAt(r, c) !== -1) return;
+                pieces.push({ color: currentColor, r, c });
+                turnIndex++;
+                if (turnIndex >= placementQueue.length) { phase = 'movement'; turnIndex = 0; }
+                resetCurrentPlayerTimer(); 
+                actionMade = true;
+            } else if (phase === 'movement') {
+                const clickedPieceIndex = getPieceIndexAt(r, c);
+
+                if (selectedPieceIndex === -1) {
+                    if (clickedPieceIndex !== -1 && pieces[clickedPieceIndex].color === currentColor) {
+                        selectedPieceIndex = clickedPieceIndex; stepsTaken = 0; actionMade = true;
+                    }
+                } else {
+                    if (stepsTaken === 0 && clickedPieceIndex !== -1 && pieces[clickedPieceIndex].color === currentColor && clickedPieceIndex !== selectedPieceIndex) {
+                        selectedPieceIndex = clickedPieceIndex; actionMade = true;
+                    } else {
+                        const p = pieces[selectedPieceIndex];
+                        const isValid = getValidMoves(p.r, p.c).some(m => m.r === r && m.c === c);
+
+                        if (isValid) {
+                            if (p.r === r && p.c === c) {
+                                movedPieceIndex = selectedPieceIndex; selectedPieceIndex = -1; stepsTaken = 0; phase = 'wall_building';
+                            } else {
+                                pieces[selectedPieceIndex].r = r; pieces[selectedPieceIndex].c = c; stepsTaken++;
+                                if (stepsTaken >= 2) {
+                                    movedPieceIndex = selectedPieceIndex; selectedPieceIndex = -1; stepsTaken = 0; phase = 'wall_building';
+                                }
+                            }
+                            actionMade = true;
+                        } else if (stepsTaken === 0) {
+                            selectedPieceIndex = -1; actionMade = true;
+                        }
+                    }
+                }
+            }
+
+            if (actionMade) {
+                saveHistoryStep();
+                render();
+                broadcastGameState(); 
+                if (mode !== 'online') checkAITurn(); 
+            }
+        }
+
+        function handleWallClick(r, c) {
+            if (phase === 'game_over' || isProcessing) return; 
+            let currentColor = phase === 'placement' ? placementQueue[turnIndex] : movementOrder[turnIndex];
+            if (isVsAI && currentColor === aiColor) return;
+            if (!checkMyTurn(currentColor)) return;
+
+            let actionMade = false;
+
+            if (phase === 'wall_building') {
+                const isValid = getValidWalls(pieces[movedPieceIndex].r, pieces[movedPieceIndex].c).some(w => w.r === r && w.c === c);
+                if (isValid && !walls.has(`${r},${c}`)) {
+                    walls.set(`${r},${c}`, currentColor); 
+                    endTurn(); 
+                    return; 
+                }
+            } else if (phase === 'wall_breaking') {
+                if (walls.has(`${r},${c}`)) {
+                    if (walls.get(`${r},${c}`) === currentColor) {
+                        walls.delete(`${r},${c}`);
+                        playersInfo[currentColor].hasBreaker = false; 
+                        phase = 'movement'; 
+                        autoCheckEndGame(false); 
+                        actionMade = true;
+                    } else {
+                        alert("只能拆除你自己建立的牆壁！");
+                    }
+                }
+            }
+
+            if (actionMade) {
+                saveHistoryStep();
+                render();
+                broadcastGameState(); 
+            }
+        }
+
+        function toggleWallBreaker() {
+            if (isProcessing) return;
+            let currentColor = movementOrder[turnIndex];
+            if (!checkMyTurn(currentColor)) return;
+
+            if (phase === 'movement' && stepsTaken === 0) {
+                let myWalls = Array.from(walls.entries()).filter(([k, v]) => v === currentColor);
+                if (myWalls.length === 0) return alert("場上目前沒有你建立的牆壁可供拆除！");
+                
+                phase = 'wall_breaking'; selectedPieceIndex = -1; 
+                render();
+                broadcastGameState();
+            }
+        }
+
+        function endTurn() {
+            movedPieceIndex = -1; selectedPieceIndex = -1; stepsTaken = 0; phase = 'movement';
+            turnIndex = (turnIndex + 1) % movementOrder.length;
+            resetCurrentPlayerTimer(); 
+            saveHistoryStep();
+            autoCheckEndGame(false); 
+            render();
+            broadcastGameState(); 
+            if (mode !== 'online') checkAITurn(); 
+        }
+
+        function getValidMoves(startR, startC) {
+            const validMoves = [];
+            for (let r = 0; r < boardSize; r += 2) {
+                for (let c = 0; c < boardSize; c += 2) {
+                    const dr = Math.abs(startR - r); const dc = Math.abs(startC - c);
+                    if ((dr === 2 && dc === 0) || (dr === 0 && dc === 2) || (dr === 0 && dc === 0)) {
+                        if (getPieceIndexAt(r, c) === -1 || (r === startR && c === startC)) {
+                            if (!hasWallBetween(startR, startC, r, c)) validMoves.push({ r, c });
+                        }
+                    }
+                }
+            }
+            return validMoves;
+        }
+
+        function hasWallBetween(r1, c1, r2, c2) {
+            if (r1 === r2 && c1 === c2) return false;
+            const wallR = (r1 + r2) / 2; const wallC = (c1 + c2) / 2;
+            return walls.has(`${wallR},${wallC}`);
+        }
+
+        function getValidWalls(pR, pC) {
+            const validWalls = [];
+            const dirs = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+            for (let [dr, dc] of dirs) {
+                const wr = pR + dr, wc = pC + dc;
+                if (wr >= 0 && wr < boardSize && wc >= 0 && wc < boardSize && !walls.has(`${wr},${wc}`)) validWalls.push({ r: wr, c: wc });
+            }
+            return validWalls;
+        }
+
+        function autoCheckEndGame(forceCalculate = false) {
+            if (phase === 'placement' && !forceCalculate) return;
+            let gameOver = forceCalculate; 
+            let scores = {}; activeColors.forEach(c => scores[c] = 0);
+            let visited = new Set(); let hasMixedTerritory = false; 
+            territories.clear(); 
+
+            for (let r = 0; r < boardSize; r += 2) {
+                for (let c = 0; c < boardSize; c += 2) {
+                    if (visited.has(`${r},${c}`)) continue;
+                    let queue = [{r, c}]; visited.add(`${r},${c}`);
+                    let regionSize = 0; let colorsInRegion = new Set(); let regionCells = []; 
+
+                    while(queue.length > 0) {
+                        const curr = queue.shift(); regionSize++; regionCells.push(curr); 
+                        const pieceIdx = getPieceIndexAt(curr.r, curr.c);
+                        if (pieceIdx !== -1) colorsInRegion.add(pieces[pieceIdx].color);
+
+                        const dirs = [[-2, 0, -1, 0], [2, 0, 1, 0], [0, -2, 0, -1], [0, 2, 0, 1]];
+                        for (const [dr, dc, wr, wc] of dirs) {
+                            const nr = curr.r + dr, nc = curr.c + dc; const w_r = curr.r + wr, w_c = curr.c + wc;
+                            if (nr >= 0 && nr < boardSize && nc >= 0 && nc < boardSize && !walls.has(`${w_r},${w_c}`) && !visited.has(`${nr},${nc}`)) {
+                                visited.add(`${nr},${nc}`); queue.push({r: nr, c: nc});
+                            }
+                        }
+                    }
+                    if (colorsInRegion.size > 1) hasMixedTerritory = true; 
+                    else if (colorsInRegion.size === 1) {
+                        const color = Array.from(colorsInRegion)[0];
+                        scores[color] += regionSize;
+                        regionCells.forEach(cell => territories.set(`${cell.r},${cell.c}`, color));
+                    }
+                }
+            }
+
+            let anyPlayerCanMove = false;
+            if (!gameOver) {
+                for (const color of activeColors) {
+                    if (playersInfo[color].hasBreaker && Array.from(walls.entries()).filter(([k, v]) => v === color).length > 0) { anyPlayerCanMove = true; break; }
+                    const playerPieces = pieces.filter(p => p.color === color);
+                    for (const p of playerPieces) {
+                        const moves = getValidMoves(p.r, p.c);
+                        for (const m of moves) {
+                            if (getValidWalls(m.r, m.c).length > 0) { anyPlayerCanMove = true; break; }
+                        }
+                        if (anyPlayerCanMove) break;
+                    }
+                    if (anyPlayerCanMove) break;
+                }
+                if (!hasMixedTerritory || !anyPlayerCanMove) gameOver = true;
+            }
+
+            if (gameOver) {
+                clearInterval(clockInterval); phase = 'game_over'; isProcessing = false; render();
+                let reason = forceCalculate ? "因有玩家單步思考超時而強制提前結算" : (!anyPlayerCanMove ? "所有玩家皆無法再進行合法操作 (僵局)" : "所有陣營已被完全封閉切割");
+                
+                let sortedColors = [...activeColors].sort((a, b) => scores[b] - scores[a]);
+                
+                let alertScoreText = sortedColors.map((c, idx) => {
+                    let isMe = (mode === 'online' && c === myOnlineColor) || (mode !== 'online' && c === 'red');
+                    let baseName = getDisplayName(c);
+                    let suffix = isMe ? ' (你)' : (isVsAI && c === aiColor ? ' (AI)' : '');
+                    
+                    return `第 ${idx + 1} 名： ${colorMap[c].icon} ${baseName}${suffix} 領土：${scores[c]} 格`;
+                }).join('\n');
+                
+                let chatScoreText = alertScoreText.replace(/\n/g, '<br>');
+                
+                let maxScore = scores[sortedColors[0]]; 
+                
+                let winners = sortedColors.filter(c => scores[c] === maxScore).map(c => {
+                    let baseName = getDisplayName(c);
+                    let isMe = (mode === 'online' && c === myOnlineColor) || (mode !== 'online' && c === 'red');
+                    return baseName + (isMe ? '(你)' : '');
+                });
+                
+                let detailParts = sortedColors.map(c => {
+                    let isMe = (mode === 'online' && c === myOnlineColor) || (mode !== 'online' && c === 'red');
+                    let colorChar = colorMap[c].text[0]; 
+                    return `${colorChar}${isMe ? '(你)' : ''}:${scores[c]}`;
+                });
+
+                const historyRecord = {
+                    date: new Date().toLocaleString('zh-TW'),
+                    winner: winners.join(' & '), 
+                    winScore: maxScore,
+                    details: detailParts.join(' | '),
+                    replayData: JSON.stringify(moveHistory) 
+                };
+
+                const uniqueKey = historyRecord.winScore + "_" + historyRecord.details.replace(/\s+/g, '');
+                try {
+                    let localReplays = JSON.parse(localStorage.getItem('wallGoReplays') || '{}');
+                    localReplays[uniqueKey] = historyRecord.replayData;
+                    localStorage.setItem('wallGoReplays', JSON.stringify(localReplays));
+                } catch (e) {
+                    console.error("本地儲存空間不足", e);
+                }
+                
+                if (session) {
+                    historyRecord.user_id = session.id;
+                    fetch(`${API_URL}/api/save_history`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(historyRecord)
+                    }).then(res => res.json())
+                      .catch(err => console.error("戰績上傳失敗", err));
+                }
+                
+                appendChatMessage('系統', 'yellow', `🏆 遊戲結束！<br>${reason}<br><br>${chatScoreText}`);
+                
+                setTimeout(() => { 
+                    alert(`🏆 遊戲結束！${reason}\n\n${alertScoreText}`); 
+                }, 150);
+            }
+        }
+
+        function getEl(r, c) { return document.querySelector(`[data-r="${r}"][data-c="${c}"]`); }
+        function getPieceIndexAt(r, c) { return pieces.findIndex(p => p.r === r && p.c === c); }
+
+        let localStream = null;
+        let myPeer = null;
+        let isMicOn = false;
+
+        async function toggleMic() {
+            const btn = document.getElementById('float-mic-btn');
+            
+            if (!isMicOn) {
+                try {
+                    if (window.location.protocol === 'file:') {
+                        alert("⚠️ 瀏覽器安全限制：\n麥克風功能無法在直接點開的本地檔案 (file://) 中使用。\n\n請使用 VS Code 的 Live Server 啟動，或是將遊戲上傳至 https 網域才能正常收音！");
+                        return;
+                    }
+
+                    localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+                    isMicOn = true;
+                    
+                    btn.classList.add('mic-active');
+                    btn.innerText = "🎙️";
+
+                    myPeer = new Peer();
+                    myPeer.on('open', (id) => {
+                        let myName = session ? session.name : '玩家';
+                        socket.emit('send_chat', { room_code: roomCode, user_name: myName, color: myOnlineColor, message: `[SYS_PEER_ID]:${id}` });
+                    });
+
+                    myPeer.on('call', (call) => {
+                        call.answer(localStream);
+                        handleCallStream(call);
+                    });
+
+                    appendChatMessage('系統', 'yellow', '🎤 麥克風已開啟。');
+
+                } catch (err) {
+                    alert("無法存取麥克風！請確認網址開頭是 https 或 localhost，並且已允許麥克風權限。");
+                    console.error("Mic error:", err);
+                }
+            } else {
+                if (localStream) {
+                    localStream.getTracks().forEach(track => track.stop());
+                    localStream = null;
+                }
+                if (myPeer) {
+                    myPeer.destroy();
+                    myPeer = null;
+                }
+                isMicOn = false;
+                
+                btn.classList.remove('mic-active');
+                btn.innerText = "🎤";
+                
+                document.getElementById('audio-container').innerHTML = '';
+                appendChatMessage('系統', 'yellow', '🔇 麥克風已關閉。');
+            }
+        }
+
+        function handleCallStream(call) {
+            call.on('stream', (remoteStream) => {
+                if (!document.getElementById(`audio-${call.peer}`)) {
+                    const audio = document.createElement('audio');
+                    audio.id = `audio-${call.peer}`;
+                    audio.srcObject = remoteStream;
+                    audio.autoplay = true;
+                    document.getElementById('audio-container').appendChild(audio);
+                }
+            });
+            call.on('close', () => {
+                const audio = document.getElementById(`audio-${call.peer}`);
+                if (audio) audio.remove();
+            });
+        }
+
+        resetGame(false);
+    </script>
+</body>
+</html>

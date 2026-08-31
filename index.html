@@ -1,0 +1,1747 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WALL GO — 遊戲大廳</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.js"></script>
+<style>
+:root{
+  /* ── 平面插畫海報風：橘底 × 米白物件 × 粗黑描邊 ── */
+  --orange:#cf5f28;
+  --orange-deep:#b04d1d;
+  --orange-hi:#e07338;
+  --cream:#f5ead3;
+  --cream-hi:#fbf4e4;
+  --cream-lo:#e6d9bb;
+  --outline:#1b1b1b;
+  --ink:#1b1b1b;
+  --ink-2:#6b6659;
+  --pink:#efa39c;
+  --blue:#4a92c4;
+  --sky:#7db8dd;
+  --green:#7fa93f;
+  --yellow:#f2c14a;
+  --red:#d94f2b;
+  --panel:#f5ead3;
+
+  /* 棋子四色 */
+  --color-red:#d94f2b;
+  --color-blue:#4a92c4;
+  --color-yellow:#f2c14a;
+  --color-green:#7fa93f;
+
+  /* 字體：粗體大寫做標題，內文中文用思源黑體 */
+  --serif:"Archivo","Noto Sans TC","Microsoft JhengHei",sans-serif;
+  --display:"Anton","Archivo","Noto Sans TC",sans-serif;
+  --bw:2.5px;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;background:var(--orange);color:var(--ink);
+  font-family:var(--serif);font-weight:400;overflow:hidden;
+  line-height:1.6;letter-spacing:.01em;
+}
+#board{position:fixed;inset:0;width:100%;height:100%;display:block}
+
+/* 背景層次與紙質顆粒 */
+.vignette{position:fixed;inset:0;pointer-events:none;
+  background:radial-gradient(135% 105% at 50% 48%, rgba(0,0,0,0) 60%, rgba(120,50,16,.20) 86%, rgba(96,40,12,.36) 100%);}
+.grain{position:fixed;inset:-50%;pointer-events:none;opacity:.06;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/></filter><rect width='140' height='140' filter='url(%23n)' opacity='.55'/></svg>");}
+
+.stage{position:fixed;inset:0;display:none;
+  grid-template-columns:auto 1fr auto;
+  grid-template-rows:auto minmax(0,1fr) auto;
+  padding:28px 34px 26px;gap:18px;pointer-events:none;overflow:auto}
+.stage.on{display:grid}
+.stage > *{pointer-events:auto}
+
+/* ── 標題 ── */
+.brand{grid-column:1;grid-row:1;align-self:start}
+.crown{width:38px;height:38px;display:block;margin:0 0 8px 3px;fill:var(--yellow);
+  stroke:var(--outline);stroke-width:1.6}
+.brand h1{font-family:var(--display);font-weight:400;font-size:clamp(50px,5.8vw,80px);
+  letter-spacing:.04em;margin:0;line-height:.94;color:var(--cream-hi);
+  -webkit-text-stroke:3px var(--outline);paint-order:stroke fill;
+  text-shadow:5px 5px 0 var(--outline)}
+.brand p{margin:14px 0 0 4px;font-size:12px;font-weight:700;letter-spacing:.26em;
+  text-transform:uppercase;color:var(--cream-hi);white-space:nowrap}
+.brand hr{border:0;border-top:var(--bw) solid var(--outline);width:58%;margin:12px 0 0 4px}
+
+/* ── 左側選單（收合成圓形，滑到哪顆才展開哪顆） ── */
+.menu{grid-column:1;grid-row:2;align-self:center;justify-self:start;
+  position:relative;width:60px;z-index:5}
+.rail{display:flex;flex-direction:column;align-items:flex-start;gap:12px;width:60px;overflow:visible}
+.item{display:flex;align-items:center;gap:14px;width:60px;height:60px;flex:0 0 auto;text-align:left;
+  cursor:pointer;padding:0 14px;border:var(--bw) solid var(--outline);border-radius:999px;color:var(--ink);
+  overflow:hidden;background:var(--cream-hi);font-family:var(--serif);font-weight:500;
+  transition:width .24s cubic-bezier(.2,.8,.2,1),transform .14s,background .18s}
+.item:hover,.item:focus-visible{width:322px;background:var(--yellow);outline:none;transform:translateY(-2px)}
+.item:active{transform:translateY(1px)}
+.item .ico{width:26px;height:26px;flex:0 0 26px;stroke:var(--outline);fill:none;stroke-width:2.2;
+  stroke-linecap:round;stroke-linejoin:round}
+.item .txt{flex:0 0 236px;opacity:0;white-space:nowrap;transition:opacity .14s}
+.item:hover .txt,.item:focus-visible .txt{opacity:1;transition-delay:.08s}
+.item b{display:block;font-size:15px;font-weight:700;letter-spacing:.05em;line-height:1.3;color:var(--outline)}
+.item small{display:block;font-size:11px;font-weight:400;color:var(--ink-2);margin-top:3px;
+  letter-spacing:.03em;line-height:1.4;overflow:hidden;text-overflow:ellipsis}
+.item .arw{flex:0 0 auto;color:var(--outline);font-size:17px;font-weight:700;opacity:0;transition:opacity .14s}
+.item:hover .arw,.item:focus-visible .arw{opacity:1}
+
+/* ── 右上玩家 ── */
+.who{grid-column:3;grid-row:1;justify-self:end;display:flex;align-items:center;gap:10px;
+  background:none;border:0;padding:0;box-shadow:none}
+.whochip{display:flex;align-items:center;gap:12px;width:60px;height:60px;padding:0 6px;overflow:hidden;
+  border:var(--bw) solid var(--outline);border-radius:999px;background:var(--cream-hi);cursor:default;
+  transition:width .24s cubic-bezier(.2,.8,.2,1),transform .14s}
+.whochip:hover{width:238px;transform:translateY(-2px)}
+.ava{width:42px;height:42px;flex:0 0 42px;border-radius:50%;background:var(--pink);
+  border:2px solid var(--outline);display:grid;place-items:center;
+  font-family:var(--serif);font-size:19px;font-weight:700;color:var(--outline)}
+.whochip .txt{flex:0 0 160px;min-width:0;opacity:0;white-space:nowrap;transition:opacity .14s}
+.whochip:hover .txt{opacity:1;transition-delay:.08s}
+.who > div{min-width:0}
+.who b{display:block;font-size:14px;font-weight:700;letter-spacing:.04em;line-height:1.3;color:var(--outline);
+  max-width:158px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.who small{display:block;font-size:10.5px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--orange-deep)}
+
+/* ── 右側面板 ── */
+.side{grid-column:3;grid-row:2;align-self:center;justify-self:end;position:relative;width:60px;z-index:5}
+.side-rail{display:flex;flex-direction:column;align-items:flex-end;gap:12px}
+.card{width:60px;height:60px;max-height:60px;display:flex;align-items:center;gap:14px;overflow:hidden;
+  border:var(--bw) solid var(--outline);border-radius:999px;background:var(--cream);padding:0 14px;
+  transition:width .24s cubic-bezier(.2,.8,.2,1),height .24s,max-height .24s,border-radius .24s,
+             padding .24s,transform .14s}
+.card:hover,.card:focus-within{width:338px;height:auto;max-height:320px;border-radius:28px;
+  align-items:flex-start;padding:18px;transform:translateY(-2px)}
+.cico{flex:0 0 26px;height:26px;display:grid;place-items:center}
+.cico svg{width:25px;height:25px;stroke:var(--outline);fill:none;stroke-width:2.2;
+  stroke-linecap:round;stroke-linejoin:round}
+.cbody{flex:0 0 264px;opacity:0;transition:opacity .14s}
+.card:hover .cbody,.card:focus-within .cbody{opacity:1;transition-delay:.08s}
+.card h2{margin:0 0 13px;font-size:11.5px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;
+  color:var(--orange-deep)}
+.count{display:flex;align-items:baseline;gap:9px}
+.count strong{font-family:var(--display);font-size:52px;font-weight:400;line-height:1;color:var(--outline);
+  font-variant-numeric:tabular-nums;letter-spacing:.01em}
+.count span{font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-2)}
+.pulse{width:10px;height:10px;border-radius:50%;background:var(--green);border:2px solid var(--outline);
+  animation:bp 2.4s ease-in-out infinite;align-self:center}
+@keyframes bp{0%,100%{opacity:.4}50%{opacity:1}}
+.rows{margin-top:14px;border-top:2px solid var(--outline);padding-top:12px;display:grid;gap:9px}
+.row{display:flex;justify-content:space-between;font-size:12.5px;font-weight:400;color:var(--ink-2);
+  letter-spacing:.03em}
+.row i{font-style:normal;color:var(--outline);font-variant-numeric:tabular-nums;font-weight:700}
+.feed{display:grid;gap:11px;margin:0;padding:0}
+.feed li{list-style:none;display:flex;justify-content:space-between;gap:10px;font-size:12px;
+  color:var(--ink-2);line-height:1.5}
+.feed li em{font-style:normal;color:var(--orange-deep);font-size:10px;font-weight:700;
+  letter-spacing:.08em;white-space:nowrap}
+.feed li b{color:var(--outline);font-weight:700}
+
+/* ── 開始遊戲 ── */
+.launch{grid-column:3;grid-row:3;justify-self:end;display:flex;flex-direction:column;gap:12px;align-items:flex-end}
+.pcs{display:flex;gap:8px;align-items:center}
+.pc{min-width:46px;padding:9px 15px;border:var(--bw) solid var(--outline);border-radius:999px;
+  background:var(--cream-hi);color:var(--ink);font-family:var(--serif);font-size:13px;font-weight:600;
+  cursor:pointer;transition:.16s}
+.pc:hover{background:var(--yellow)}
+.pc.active{background:var(--blue);color:var(--cream-hi)}
+.start{cursor:pointer;display:flex;align-items:center;gap:14px;padding:17px 44px;border-radius:999px;
+  border:3px solid var(--outline);color:var(--outline);font-family:var(--serif);
+  font-size:21px;font-weight:700;letter-spacing:.1em;background:var(--yellow);
+  transition:transform .14s,background .16s}
+.start:hover{background:#f7ce62;transform:translateY(-3px)}
+.start:active{transform:translateY(1px)}
+.start svg{width:22px;height:22px;fill:var(--outline)}
+
+.tools{grid-column:1;grid-row:3;align-self:end;display:flex;gap:10px}
+.tool{width:52px;height:52px;border:var(--bw) solid var(--outline);border-radius:50%;background:var(--cream-hi);
+  cursor:pointer;display:grid;place-items:center;transition:.16s}
+.tool svg{width:21px;height:21px;stroke:var(--outline);fill:none;stroke-width:2.2;
+  stroke-linecap:round;stroke-linejoin:round}
+.tool:hover{background:var(--yellow);transform:translateY(-2px)}
+.tool:active{transform:translateY(1px)}
+.tool.off{background:var(--cream-lo)}
+.tool.off svg{opacity:.35}
+
+/* ── 對話框 ── */
+.scrim{position:fixed;inset:0;background:rgba(60,24,8,.62);backdrop-filter:blur(3px);
+  display:none;place-items:center;z-index:20;padding:20px}
+.scrim.on{display:grid}
+.modal{width:min(440px,100%);max-height:88vh;overflow-y:auto;border:3px solid var(--outline);
+  border-radius:26px;padding:28px 26px 24px;background:var(--cream-hi)}
+.modal.wide{width:min(530px,100%)}
+.modal::-webkit-scrollbar{width:7px}
+.modal::-webkit-scrollbar-thumb{background:var(--cream-lo);border-radius:9px}
+.modal h3{margin:0 0 6px;font-family:var(--display);font-size:38px;font-weight:400;letter-spacing:.03em;
+  line-height:1.05;text-transform:uppercase;color:var(--outline)}
+.modal .sub{margin:0 0 22px;font-size:11px;font-weight:700;letter-spacing:.22em;text-transform:uppercase;
+  color:var(--orange-deep)}
+.stat{display:flex;justify-content:space-between;gap:16px;padding:11px 0;line-height:1.6;
+  border-bottom:2px solid rgba(27,27,27,.14);font-size:13.5px;font-weight:600;color:var(--outline)}
+.stat span{color:var(--ink-2);font-weight:400;white-space:nowrap}
+.stat i{font-style:normal;font-variant-numeric:tabular-nums;text-align:right}
+.code{margin:18px 0 4px;padding:20px;text-align:center;border-radius:20px;
+  border:3px solid var(--outline);background:var(--sky);
+  font-family:var(--display);font-size:44px;font-weight:400;letter-spacing:.18em;color:var(--outline)}
+/* 遊戲規則：說明一律單行，不換行 */
+.modal.rules .stat i{white-space:nowrap}
+
+.opt{display:flex;gap:9px;margin-top:14px;flex-wrap:wrap}
+.chip{padding:8px 16px;border:2px solid var(--outline);border-radius:999px;background:var(--cream);
+  color:var(--ink);font-family:var(--serif);font-size:13px;font-weight:600;cursor:pointer;transition:.16s}
+.chip:hover{background:var(--yellow)}
+.chip[aria-pressed="true"]{color:var(--cream-hi);background:var(--blue)}
+.close{margin-top:22px;width:100%;padding:13px;border:2px solid var(--outline);background:var(--cream);
+  cursor:pointer;color:var(--outline);font-family:var(--serif);font-size:14px;font-weight:600;
+  letter-spacing:.1em;border-radius:14px;transition:.16s}
+.close:hover{background:var(--cream-lo);transform:translateY(-2px)}
+.close:active{transform:translateY(1px)}
+
+/* 表單 / 按鈕 */
+.field{margin-bottom:16px}
+.field label{display:block;margin-bottom:8px;font-size:10.5px;font-weight:700;letter-spacing:.18em;
+  text-transform:uppercase;color:var(--orange-deep)}
+.field input{width:100%;padding:14px;border-radius:14px;border:2px solid var(--outline);
+  background:#fff;color:var(--ink);font-size:15px;font-family:var(--serif);font-weight:400;
+  outline:none;transition:.18s}
+.field input:focus{background:var(--cream-hi);box-shadow:inset 0 0 0 2px var(--yellow)}
+.field input::placeholder{color:#a8a396}
+.btn{width:100%;padding:14px;border-radius:14px;cursor:pointer;font-family:var(--serif);
+  font-size:14px;font-weight:600;letter-spacing:.1em;border:2px solid var(--outline);
+  background:var(--cream);color:var(--outline);transition:.16s}
+.btn:hover{background:var(--cream-lo);transform:translateY(-2px)}
+.btn:active{transform:translateY(1px)}
+.btn.gold{background:var(--yellow);color:var(--outline);font-weight:700}
+.btn.gold:hover{background:#f7ce62}
+.btn.gold:disabled{opacity:.42;cursor:not-allowed;transform:none}
+.btn.danger{background:var(--red);color:var(--cream-hi);font-weight:600}
+.btn.danger:hover{background:#e5613e}
+.btn + .btn{margin-top:12px}
+.linky{display:block;text-align:right;margin:-4px 0 16px;font-size:11px;font-weight:700;
+  letter-spacing:.1em;text-transform:uppercase;color:var(--orange-deep);cursor:pointer}
+.linky:hover{text-decoration:underline}
+
+/* ── 開場動畫：破牆之後標題落下、登入卡升起 ── */
+.auth.intro-wait,.auth.intro-play{overflow:hidden}
+.auth.intro-wait .auth-inner h1,
+.auth.intro-wait .auth-inner .tag,
+.auth.intro-wait .auth-card{opacity:0}
+@keyframes dropIn{
+  0%  {transform:translateY(-320%) scale(.55) rotate(-12deg);opacity:0}
+  45% {opacity:1}
+  58% {transform:translateY(16%)  scale(1.14) rotate(4deg)}
+  72% {transform:translateY(-9%)  scale(.95)  rotate(-2.5deg)}
+  85% {transform:translateY(4%)   scale(1.04) rotate(1deg)}
+  93% {transform:translateY(-1.5%) scale(.99) rotate(-.4deg)}
+  100%{transform:translateY(0)    scale(1)    rotate(0);opacity:1}}
+@keyframes riseIn{
+  0%  {transform:translateY(150%) scale(.86) rotate(3deg);opacity:0}
+  40% {opacity:1}
+  62% {transform:translateY(-9%)  scale(1.06) rotate(-1.5deg)}
+  78% {transform:translateY(5%)   scale(.97) rotate(.8deg)}
+  90% {transform:translateY(-2%)  scale(1.02) rotate(-.3deg)}
+  100%{transform:translateY(0)    scale(1)   rotate(0);opacity:1}}
+.auth.intro-play .auth-inner h1{animation:dropIn 1.05s cubic-bezier(.3,.7,.4,1) both}
+.auth.intro-play .auth-inner .tag{animation:dropIn 1.05s cubic-bezier(.3,.7,.4,1) .14s both}
+.auth.intro-play .auth-card{animation:riseIn .95s cubic-bezier(.3,.7,.4,1) .42s both}
+
+/* 登入頁 */
+.auth{position:fixed;inset:0;display:none;place-items:center;padding:20px;z-index:15;overflow-y:auto}
+.auth.on{display:grid}
+.auth-inner{width:min(440px,100%);text-align:center}
+.auth-inner h1{font-family:var(--display);font-size:clamp(52px,7.8vw,74px);font-weight:400;
+  letter-spacing:.04em;margin:0 0 10px;color:var(--cream-hi);line-height:1;
+  -webkit-text-stroke:3px var(--outline);paint-order:stroke fill;
+  text-shadow:5px 5px 0 var(--outline)}
+.auth-inner .tag{font-size:11px;font-weight:700;letter-spacing:.26em;text-transform:uppercase;
+  color:var(--cream-hi);margin:0 0 26px}
+.auth-card{border:3px solid var(--outline);border-radius:26px;padding:26px;text-align:left;
+  background:var(--cream-hi)}
+.tabs{display:flex;gap:8px;margin-bottom:22px}
+.tab{flex:1;padding:11px;background:var(--cream);border:2px solid var(--outline);border-radius:999px;
+  color:var(--ink-2);font-family:var(--serif);font-size:13.5px;font-weight:600;cursor:pointer;transition:.16s}
+.tab:hover{background:var(--cream-lo)}
+.tab.active{color:var(--cream-hi);background:var(--outline)}
+.form{display:none}
+.form.active{display:block}
+
+/* 房間 / 好友列表 */
+.rlist{display:grid;gap:10px;margin-top:12px;max-height:240px;overflow-y:auto;padding:2px}
+.rlist::-webkit-scrollbar{width:6px}
+.rlist::-webkit-scrollbar-thumb{background:var(--cream-lo);border-radius:9px}
+.pitem{display:flex;align-items:center;gap:13px;padding:12px 14px;border:2px solid var(--outline);
+  border-radius:16px;background:var(--cream)}
+.pitem .ava{width:38px;height:38px;flex:0 0 38px;font-size:16px}
+.pitem .nm{font-size:14px;font-weight:700;color:var(--outline)}
+.pitem .idz{font-size:11px;font-weight:400;color:var(--ink-2);letter-spacing:.04em}
+.pitem .act{margin-left:auto;display:flex;gap:6px;align-items:center}
+.dot{width:10px;height:10px;border-radius:50%;background:var(--green);border:2px solid var(--outline);
+  display:inline-block;margin-left:7px;vertical-align:middle}
+.mini{padding:7px 13px;border:2px solid var(--outline);border-radius:999px;background:var(--cream-hi);
+  color:var(--outline);font-family:var(--serif);font-size:12px;font-weight:600;cursor:pointer;
+  white-space:nowrap;transition:.16s}
+.mini:hover{background:var(--yellow)}
+.mini.ok{background:var(--green);color:var(--cream-hi)}
+.mini.no{background:var(--red);color:var(--cream-hi)}
+.hint{font-size:12.5px;font-weight:400;color:var(--ink-2);line-height:1.7}
+.divider{border:0;border-top:2px solid rgba(27,27,27,.16);margin:18px 0}
+.grouplbl{margin:18px 0 8px;font-size:10.5px;font-weight:700;letter-spacing:.18em;
+  text-transform:uppercase;color:var(--orange-deep)}
+.joinbar{display:flex;gap:10px}
+.joinbar input{flex:1;padding:14px;border-radius:14px;border:2px solid var(--outline);background:#fff;
+  color:var(--ink);font-family:var(--display);font-size:26px;font-weight:400;letter-spacing:.18em;
+  text-align:center;outline:none}
+.joinbar input:focus{background:var(--cream-hi)}
+.joinbar .btn{width:auto;padding:0 26px;white-space:nowrap}
+
+/* 戰績 */
+.hitem{border:2px solid var(--outline);border-radius:16px;padding:13px 15px;background:var(--cream);
+  display:flex;justify-content:space-between;align-items:center;gap:12px}
+.hitem .hd{font-size:10px;font-weight:700;letter-spacing:.1em;color:var(--orange-deep)}
+.hitem .hw{font-size:14.5px;font-weight:700;margin:3px 0;color:var(--outline)}
+.hitem .hs{font-size:12px;font-weight:400;color:var(--ink-2)}
+.empty{text-align:center;color:var(--ink-2);font-size:13px;font-weight:400;padding:26px 0;line-height:1.8}
+
+/* 覆盤棋盤 */
+.board{background:var(--cream-lo);padding:12px;border-radius:22px;border:3px solid var(--outline);
+  display:grid;grid-template-columns:repeat(6,1fr 0.25fr) 1fr;grid-template-rows:repeat(6,1fr 0.25fr) 1fr;
+  box-sizing:border-box}
+.grid-item{display:flex;justify-content:center;align-items:center}
+.cell{background-color:var(--cream-hi);border-radius:8px;box-shadow:inset 0 0 0 2px var(--outline)}
+.wall-h,.wall-v{border-radius:4px}
+.intersection{background-color:transparent}
+.piece{border-radius:50%;width:74%;height:74%;border:2.5px solid var(--outline);box-sizing:border-box}
+.piece-red{background-color:var(--color-red)}
+.piece-blue{background-color:var(--color-blue)}
+.piece-yellow{background-color:var(--color-yellow)}
+.piece-green{background-color:var(--color-green)}
+.wall-placed{cursor:default}
+.wall-red{background-color:var(--color-red)!important}
+.wall-blue{background-color:var(--color-blue)!important}
+.wall-yellow{background-color:var(--color-yellow)!important}
+.wall-green{background-color:var(--color-green)!important}
+.wall-broken-highlight{background-color:var(--red)!important;position:relative}
+.wall-broken-highlight::after{content:"✖";color:#fff;position:absolute;top:50%;left:50%;
+  transform:translate(-50%,-50%);font-size:14px;font-weight:700}
+.replay-bar{display:flex;gap:10px;justify-content:center;align-items:center;margin:16px 0 4px}
+.replay-bar .btn{width:auto;flex:1;padding:12px;margin-top:0}
+.replay-bar #replay-step-display{min-width:82px;text-align:center;font-family:var(--display);
+  font-size:22px;font-weight:400;color:var(--outline)}
+
+.toast{position:fixed;left:50%;bottom:34px;transform:translate(-50%,20px);opacity:0;z-index:30;
+  padding:13px 26px;border:2px solid var(--outline);background:var(--yellow);color:var(--outline);
+  border-radius:999px;font-size:13.5px;font-weight:600;letter-spacing:.04em;
+  transition:.35s ease;pointer-events:none;max-width:86vw;text-align:center}
+.toast.on{transform:translate(-50%,0);opacity:1}
+
+/* 螢幕高度不足時整體縮一號 */
+@media (max-height:760px){
+  .stage.on{padding:18px 24px 18px;gap:12px}
+  .brand h1{font-size:clamp(38px,4vw,52px)}
+  .brand p{font-size:10.5px;margin-top:10px}
+  .brand hr{margin-top:8px}
+  .count strong{font-size:40px}
+  .card h2{margin-bottom:10px}
+  .start{padding:14px 34px;font-size:19px}
+}
+@media (max-height:600px){
+  .side-rail{gap:10px}
+  .rows{margin-top:10px;padding-top:9px}
+  .start{padding:12px 28px;font-size:17px}
+  .tools{display:none}
+}
+
+@media (max-width:1080px){
+  body{overflow:auto}
+  .stage.on{grid-template-columns:1fr;grid-template-rows:auto auto auto auto;padding:18px;
+    overflow-y:auto;gap:14px;position:absolute;inset:auto 0 auto 0;min-height:100%}
+  .brand{grid-column:1;grid-row:1}
+  .who{grid-column:1;grid-row:1;justify-self:end;align-self:start}
+  .menu{grid-column:1;grid-row:2;align-self:start;justify-self:stretch;width:auto}
+  .rail{width:100%;align-items:stretch}
+  .item{width:100%;height:auto;padding:15px 18px;border-radius:26px}
+  .item .txt{flex:1;min-width:0;opacity:1}
+  .item .arw{opacity:1}
+  .whochip{width:auto;height:auto;padding:8px 14px 8px 8px;border-radius:999px}
+  .whochip .txt{flex:1;opacity:1}
+  .side{grid-column:1;grid-row:3;align-self:start;justify-self:stretch;width:auto}
+  .side-rail{align-items:stretch}
+  .card{width:100%;height:auto;max-height:none;padding:16px 18px;border-radius:26px;align-items:flex-start}
+  .cico{display:none}
+  .cbody{flex:1;min-width:0;opacity:1}
+  .launch{grid-column:1;grid-row:4;justify-self:stretch;align-items:stretch}
+  .start{justify-content:center;font-size:19px;padding:16px}
+  .pcs{justify-content:center;flex-wrap:wrap}
+  .tools{display:none}
+  .brand h1{font-size:44px}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+
+<canvas id="board"></canvas>
+<div class="vignette"></div><div class="grain"></div>
+
+<!-- ═══════════ 登入 / 註冊 ═══════════ -->
+<div class="auth" id="auth-page">
+  <div class="auth-inner">
+    <h1>WALL GO</h1>
+    <p class="tag">BOUTIQUE BOARD GAME</p>
+    <div class="auth-card">
+      <div class="tabs">
+        <button class="tab active" onclick="switchAuthTab('login')">會員登入</button>
+        <button class="tab" onclick="switchAuthTab('register')">註冊新會員</button>
+      </div>
+
+      <div id="form-login" class="form active">
+        <div class="field">
+          <label>玩家 ID</label>
+          <input type="text" id="login-id" placeholder="例如: #1234">
+        </div>
+        <div class="field">
+          <label>登入密碼</label>
+          <input type="password" id="login-pwd" placeholder="請輸入密碼">
+        </div>
+        <a class="linky" onclick="handleForgotPassword()">忘記密碼？（重設）</a>
+        <button class="btn gold" onclick="performLogin()">進入大廳</button>
+      </div>
+
+      <div id="form-register" class="form">
+        <div class="field">
+          <label>設定玩家暱稱</label>
+          <input type="text" id="reg-name" placeholder="例如: 牆壁毀滅者">
+        </div>
+        <div class="field">
+          <label>設定登入密碼</label>
+          <input type="password" id="reg-pwd" placeholder="請設定一組好記的密碼">
+        </div>
+        <button class="btn gold" onclick="performRegister()">註冊並自動登入</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ 大廳 ═══════════ -->
+<div class="stage" id="stage">
+
+  <div class="brand">
+    <svg class="crown" viewBox="0 0 40 40"><path d="M20 0l4.4 12.6L36 6.5l-7.4 11L40 20l-11.4 2.5L36 33.5l-11.6-6.1L20 40l-4.4-12.6L4 33.5l7.4-11L0 20l11.4-2.5L4 6.5l11.6 6.1z"/></svg>
+    <h1>WALL GO</h1>
+    <p>BOUTIQUE BOARD GAME</p>
+    <hr>
+  </div>
+
+  <nav class="menu">
+   <div class="rail">
+    <button class="item" data-act="solo" title="單機對戰">
+      <svg class="ico" viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg>
+      <span class="txt"><b>單機對戰</b><small>與 AI 或同桌好友立即開局</small></span><span class="arw">›</span>
+    </button>
+    <button class="item" data-act="room" title="線上房間">
+      <svg class="ico" viewBox="0 0 24 24"><path d="M4 20V9l8-5 8 5v11"/><path d="M9 20v-6h6v6"/></svg>
+      <span class="txt"><b>線上房間</b><small>建立房號，或輸入代碼入座</small></span><span class="arw">›</span>
+    </button>
+    <button class="item" data-act="friend" title="好友名單">
+      <svg class="ico" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5"/><path d="M17 8.5h4M19 6.5v4"/></svg>
+      <span class="txt"><b>好友名單</b><small id="menu-friend-sub">加好友、審核邀請</small></span><span class="arw">›</span>
+    </button>
+    <button class="item" data-act="history" title="歷史戰績">
+      <svg class="ico" viewBox="0 0 24 24"><path d="M4 5h16v14H4z"/><path d="M8 9h8M8 13h5"/></svg>
+      <span class="txt"><b>歷史戰績</b><small id="menu-history-sub">對局紀錄與棋盤覆盤</small></span><span class="arw">›</span>
+    </button>
+    <button class="item" data-act="me" title="我的資料">
+      <svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.4"/><path d="M5 20c0-3.6 3.1-6 7-6s7 2.4 7 6"/></svg>
+      <span class="txt"><b>我的資料</b><small>暱稱、頭像與戰績統計</small></span><span class="arw">›</span>
+    </button>
+   </div>
+  </nav>
+
+  <div class="who">
+    <div class="whochip">
+      <div class="ava" id="display-avatar">👤</div>
+      <div class="txt"><b id="display-name">載入中…</b><small id="display-id">ID: —</small></div>
+    </div>
+  </div>
+
+  <div class="side">
+   <div class="side-rail">
+    <section class="card" tabindex="0" title="我的戰績">
+      <div class="cico"><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></div>
+      <div class="cbody">
+        <h2>我的戰績</h2>
+        <div class="count"><span class="pulse"></span><strong id="win-rate">0%</strong><span>勝率</span></div>
+        <div class="rows">
+          <div class="row"><span>總對局</span><i id="total-games">0</i></div>
+          <div class="row"><span>勝場</span><i id="total-wins">0</i></div>
+          <div class="row"><span>敗場</span><i id="total-loses">0</i></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card" tabindex="0" title="最新戰報">
+      <div class="cico"><svg viewBox="0 0 24 24"><path d="M5 4h11l3 3v13H5z"/><path d="M8 10h8M8 14h5"/></svg></div>
+      <div class="cbody">
+        <h2>最新戰報</h2>
+        <ul class="feed" id="feed-list">
+          <li><span>戰績載入中…</span></li>
+        </ul>
+      </div>
+    </section>
+   </div>
+  </div>
+
+  <div class="launch">
+    <div class="pcs">
+      <button class="pc" data-val="ai" onclick="setPlayers('ai')">AI</button>
+      <button class="pc" data-val="2" onclick="setPlayers(2)">2</button>
+      <button class="pc active" data-val="3" onclick="setPlayers(3)">3</button>
+      <button class="pc" data-val="4" onclick="setPlayers(4)">4</button>
+    </div>
+    <button class="start" data-act="start">
+      <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>開始遊戲
+    </button>
+  </div>
+
+  <div class="tools">
+    <button class="tool" id="mute" title="音樂"><svg viewBox="0 0 24 24"><path d="M9 9h3l4-3v12l-4-3H9z"/><path d="M18 9c1 1.6 1 4.4 0 6"/></svg></button>
+    <button class="tool" data-act="help" title="規則"><svg viewBox="0 0 24 24"><path d="M9.5 9a2.6 2.6 0 1 1 3.4 2.5c-.6.3-.9.9-.9 1.6v.6"/><circle cx="12" cy="17.4" r=".7" fill="currentColor" stroke="none"/></svg></button>
+    <button class="tool" data-act="info" title="系統資訊"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6"/><circle cx="12" cy="7.6" r=".7" fill="currentColor" stroke="none"/></svg></button>
+    <button class="tool" data-act="settings" title="設定"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></svg></button>
+  </div>
+</div>
+
+<!-- ═══════════ 對話框 ═══════════ -->
+
+<!-- 忘記密碼 -->
+<div class="scrim" id="forgot-pwd-modal">
+  <div class="modal">
+    <h3>Reset</h3><p class="sub">重設密碼</p>
+    <p class="hint" style="margin:0 0 16px">請輸入您的玩家 ID 以及欲修改的新密碼。</p>
+    <div class="field"><label>玩家 ID</label><input type="text" id="forgot-pwd-id" placeholder="例: #1234"></div>
+    <div class="field"><label>設定新密碼</label><input type="password" id="forgot-pwd-new" placeholder="請輸入新密碼"></div>
+    <button class="btn gold" onclick="resetPassword()">確認重設</button>
+    <button class="close" onclick="closeModal('forgot-pwd-modal')">取消</button>
+  </div>
+</div>
+
+<!-- 單機開局 -->
+<div class="scrim" id="solo-modal">
+  <div class="modal">
+    <h3>Local game</h3><p class="sub">單機對戰 ・ 選擇人數</p>
+    <p class="hint">選擇「AI」與電腦對弈，或選 2～4 人在同一台裝置輪流下棋。</p>
+    <div class="opt" id="solo-chips">
+      <button class="chip" data-val="ai">AI</button>
+      <button class="chip" data-val="2">2 人</button>
+      <button class="chip" data-val="3">3 人</button>
+      <button class="chip" data-val="4">4 人</button>
+    </div>
+    <div class="stat" style="margin-top:18px"><span>棋盤大小</span><i>7 × 7</i></div>
+    <div class="stat"><span>每回合限時</span><i>90 秒</i></div>
+    <button class="btn gold" style="margin-top:18px" onclick="startGame()">開始單機遊戲</button>
+    <button class="close" onclick="closeModal('solo-modal')">關閉</button>
+  </div>
+</div>
+
+<!-- 線上房間 -->
+<div class="scrim" id="room-modal">
+  <div class="modal wide">
+    <div id="room-ui-main">
+      <h3>Online</h3><p class="sub">線上對戰大廳</p>
+      <button class="btn gold" onclick="createRoom()">建立新房間</button>
+      <hr class="divider">
+      <p class="hint" style="margin:0 0 10px">或輸入 4 位數代碼加入好友的房間</p>
+      <div class="joinbar">
+        <input type="text" id="join-room-input" placeholder="代碼" maxlength="4">
+        <button class="btn" onclick="joinRoom()">加入</button>
+      </div>
+      <button class="close" onclick="closeModal('room-modal')">取消</button>
+    </div>
+
+    <div id="room-ui-waiting" style="display:none">
+      <h3>Waiting room</h3><p class="sub">房間等候室</p>
+      <p class="hint">已成功入座，請將此代碼分享給對手：</p>
+      <div class="code" id="display-room-code">0000</div>
+      <div class="grouplbl">房內玩家（<span id="room-player-count">1</span>/4）</div>
+      <div class="rlist" id="room-players-list"></div>
+      <button class="btn gold" id="btn-start-online" style="margin-top:18px" disabled onclick="startOnlineGame()">開始線上對戰</button>
+      <button class="close" onclick="leaveRoom()">離開房間</button>
+    </div>
+  </div>
+</div>
+
+<!-- 好友 -->
+<div class="scrim" id="friends-modal">
+  <div class="modal wide">
+    <h3>Friends</h3><p class="sub">我的好友</p>
+    <div class="joinbar">
+      <input type="text" id="add-friend-input" placeholder="#1234" style="font-size:16px;letter-spacing:.16em">
+      <button class="btn" onclick="sendFriendRequest()">發送</button>
+    </div>
+    <div id="friend-list-render" style="margin-top:6px">
+      <p class="empty">載入中…</p>
+    </div>
+    <button class="close" onclick="closeModal('friends-modal')">關閉</button>
+  </div>
+</div>
+
+<!-- 歷史戰績 -->
+<div class="scrim" id="history-modal">
+  <div class="modal wide">
+    <h3>Records</h3><p class="sub">歷史戰績 ・ 棋盤覆盤</p>
+    <div class="stat"><span>總對局</span><i id="h-total">0 場</i></div>
+    <div class="stat"><span>勝率</span><i id="h-rate">0%</i></div>
+    <div class="rlist" id="history-list" style="max-height:320px;margin-top:14px"></div>
+    <button class="btn danger" style="margin-top:16px" onclick="clearHistory()">清除所有紀錄</button>
+    <button class="close" onclick="closeModal('history-modal')">關閉</button>
+  </div>
+</div>
+
+<!-- 覆盤 -->
+<div class="scrim" id="replay-modal">
+  <div class="modal wide">
+    <h3>Replay</h3><p class="sub">棋盤覆盤</p>
+    <div id="replay-board" class="board" style="width:100%;max-width:min(100%,52vh);aspect-ratio:1/1;margin:0 auto"></div>
+    <div class="replay-bar">
+      <button class="btn" id="btn-prev-step" onclick="changeReplayStep(-1)">上一步</button>
+      <span id="replay-step-display">0 / 0</span>
+      <button class="btn" id="btn-next-step" onclick="changeReplayStep(1)">下一步</button>
+    </div>
+    <button class="close" onclick="closeReplay()">關閉覆盤</button>
+  </div>
+</div>
+
+<!-- 我的資料 -->
+<div class="scrim" id="me-modal">
+  <div class="modal">
+    <h3 id="me-name">玩家</h3><p class="sub" id="me-id">ID: —</p>
+    <div class="stat"><span>總對局</span><i id="me-total">0</i></div>
+    <div class="stat"><span>勝／敗</span><i id="me-wl">0 / 0</i></div>
+    <div class="stat"><span>勝率</span><i id="me-rate">0%</i></div>
+    <div class="stat"><span>最近戰果</span><i id="me-last">—</i></div>
+    <button class="btn" style="margin-top:18px" onclick="openProfileEditor()">編輯個人資料</button>
+    <button class="btn" onclick="openFriendList()">好友名單</button>
+    <button class="close" onclick="closeModal('me-modal')">關閉</button>
+  </div>
+</div>
+
+<!-- 編輯資料 -->
+<div class="scrim" id="profile-modal">
+  <div class="modal">
+    <h3>Profile</h3><p class="sub">編輯個人資料</p>
+    <div class="field"><label>玩家頭像（單一字母或 Emoji）</label><input type="text" id="input-avatar" maxlength="2"></div>
+    <div class="field"><label>玩家暱稱</label><input type="text" id="input-name"></div>
+    <button class="btn gold" onclick="saveProfile()">儲存修改</button>
+    <button class="close" onclick="closeModal('profile-modal')">取消</button>
+  </div>
+</div>
+
+<!-- 設定 -->
+<div class="scrim" id="settings-modal">
+  <div class="modal">
+    <h3>Settings</h3><p class="sub">設定</p>
+    <div class="stat"><span>背景動畫</span><i id="set-anim">開啟</i></div>
+    <div class="stat"><span>音樂</span><i id="set-music">開啟</i></div>
+    <button class="btn" style="margin-top:18px" onclick="toggleAnim()">切換背景動畫</button>
+    <button class="btn" onclick="toggleMusic()">切換音樂</button>
+    <button class="btn" onclick="closeModal('settings-modal');openProfileEditor()">編輯個人資料</button>
+    <button class="btn danger" onclick="logout()">登出帳號</button>
+    <button class="close" onclick="closeModal('settings-modal')">關閉</button>
+  </div>
+</div>
+
+<!-- 規則 -->
+<div class="scrim" id="rules-modal">
+  <div class="modal wide rules">
+    <h3>How to play</h3><p class="sub">遊戲規則</p>
+    <div class="stat"><span>一、放置期</span><i>依序放完 2 顆棋子</i></div>
+    <div class="stat"><span>二、行動期</span><i>每回移動 1～2 步，含 L 型轉彎不可越子</i></div>
+    <div class="stat"><span>三、建牆</span><i>移動後須在該棋子四周蓋牆</i></div>
+    <div class="stat"><span>四、破牆</span><i>每人一次，可打破任何一道牆</i></div>
+    <div class="stat"><span>五、限時</span><i>每回合 90 秒，超時由伺服器代打</i></div>
+    <div class="stat"><span>六、獲勝</span><i>佔領最多純淨獨占領地者勝</i></div>
+    <button class="close" onclick="closeModal('rules-modal')">我準備好了</button>
+  </div>
+</div>
+
+<!-- 系統資訊 -->
+<div class="scrim" id="info-modal">
+  <div class="modal">
+    <h3>About</h3><p class="sub">系統資訊</p>
+    <div class="stat"><span>遊戲名稱</span><i>Wall Go（源自魔鬼的計謀）</i></div>
+    <div class="stat"><span>目前版本</span><i>v12（新版大廳）</i></div>
+    <div class="stat"><span>連線狀態</span><i id="conn-state">連線中…</i></div>
+    <p class="hint" style="margin-top:16px;text-align:center;color:var(--brass-soft)">已成功連接至雲端資料庫</p>
+    <button class="close" onclick="closeModal('info-modal')">關閉</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ═════════ 背景：Wall Go 對局模擬（棋子移動 + 建牆） ═════════ */
+const cv = document.getElementById('board'), ctx = cv.getContext('2d');
+const N = 7, SHEAR = 0, SQUASH = .58;
+let REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches
+           || localStorage.getItem('wallGoAnim') === 'off';
+
+const C = {
+  dark:'#c9ab77', light:'#f2e3bb', rim:'#13294b', rimEdge:'#13294b', edge:'#16253d',
+  /* 四位玩家，每人兩子；牆的顏色＝棋子的顏色 */
+  p:[{body:'#c4442d', top:'#d8583f', wall:'#c4442d', wallSide:'#9e3320'},
+     {body:'#2c4a7c', top:'#3f66a3', wall:'#2c4a7c', wallSide:'#1d3355'},
+     {body:'#e8b12e', top:'#f5c94f', wall:'#e8b12e', wallSide:'#bd8a16'},
+     {body:'#4c8a45', top:'#5fa456', wall:'#4c8a45', wallSide:'#376630'}]
+};
+
+let W, H, S, OX, OY;
+function resize(){
+  const dpr = Math.min(devicePixelRatio||1, 2);
+  W = innerWidth; H = innerHeight;
+  cv.width = W*dpr; cv.height = H*dpr;
+  cv.style.width = W+'px'; cv.style.height = H+'px';
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  S = Math.max(Math.min(W/11, H/6.4), 40);
+  OX = W*0.5; OY = H*0.54;
+}
+addEventListener('resize', resize); resize();
+
+const proj = (x,y,z=0)=>({
+  X: OX + (x-N/2)*S + (y-N/2)*S*SHEAR,
+  Y: OY + (y-N/2)*S*SQUASH - z
+});
+
+/* 狀態 */
+let pieces=[], walls=new Map(), turn=0, moveCount=0;
+const kH=(x,y)=>x+','+y+',H', kV=(x,y)=>x+','+y+',V';
+
+function initBg(){
+  pieces=[]; walls.clear(); turn=0; moveCount=0;
+  breakers=[true,true,true,true]; lastBreak=-99;   /* 每種顏色一局只有一次破牆機會 */
+  const spots=[[1,1],[5,5], [5,1],[1,5], [3,1],[3,5], [1,3],[5,3]];
+  spots.forEach((s,i)=>pieces.push({p:Math.floor(i/2), x:s[0], y:s[1], dx:s[0], dy:s[1]}));
+}
+const occupied=(x,y)=>pieces.some(o=>o.x===x&&o.y===y);
+function blocked(x,y,nx,ny){
+  if(ny===y-1) return walls.has(kH(x,y));
+  if(ny===y+1) return walls.has(kH(x,y+1));
+  if(nx===x-1) return walls.has(kV(x,y));
+  return walls.has(kV(x+1,y));
+}
+function reach(pc){
+  const seen=new Map([[pc.x+','+pc.y,[]]]); let frontier=[[pc.x,pc.y,[]]];
+  for(let step=0;step<2;step++){
+    const next=[];
+    for(const [x,y,path] of frontier){
+      for(const [dx,dy] of [[0,-1],[0,1],[-1,0],[1,0]]){
+        const nx=x+dx, ny=y+dy, k=nx+','+ny;
+        if(nx<0||ny<0||nx>=N||ny>=N||seen.has(k)) continue;
+        if(blocked(x,y,nx,ny)||occupied(nx,ny)) continue;
+        const np=path.concat([[nx,ny]]); seen.set(k,np); next.push([nx,ny,np]);
+      }
+    }
+    frontier=next;
+  }
+  seen.delete(pc.x+','+pc.y);
+  return [...seen.values()];
+}
+function wallSpots(x,y){
+  const o=[];
+  if(y>0 && !walls.has(kH(x,y))) o.push(kH(x,y));
+  if(y<N-1 && !walls.has(kH(x,y+1))) o.push(kH(x,y+1));
+  if(x>0 && !walls.has(kV(x,y))) o.push(kV(x,y));
+  if(x<N-1 && !walls.has(kV(x+1,y))) o.push(kV(x+1,y));
+  return o;
+}
+const pick=a=>a[Math.floor(Math.random()*a.length)];
+
+/* 回合流程 */
+let phase='idle', t0=0, actor=null, path=[], from=null, newWall=null, fade=0;
+
+/* ═ 破牆：碎片與衝擊波 ═ */
+let shards=[], bursts=[], breakers=[true,true,true,true], lastBreak=-99;
+
+/* ═ 開場動畫：棋子被四面牆困住 → 長出手臂打破 → 逃出 ═ */
+let introHero=null, armAlpha=0, hammerAng=0, introSmashed=false, shake=0, cageKeys=[];
+let impact=null, NOW=0, introStage=null;
+
+/* 依據距離延遲的震波：越遠越晚跳、越遠幅度越小，並以阻尼彈跳收斂 */
+function joltZ(x, y){
+  if(!impact) return 0;
+  const p = (NOW-impact.t)/1000 - Math.hypot(x-impact.x, y-impact.y)*0.052;
+  if(p<0 || p>1.1) return 0;
+  const dist = Math.hypot(x-impact.x, y-impact.y);
+  const amp = S*0.42 * Math.exp(-dist*0.20);
+  return Math.abs(Math.sin(p*13)) * Math.exp(-p*4.2) * amp;
+}
+const REST_ANG=-0.35, RAISE_ANG=-2.45, SLAM_ANG=0.62;
+const HAS_SESSION = !!localStorage.getItem('wallGoSession');
+
+const INTRO_MOVES=3;                 /* 開場先正常走幾步再收網 */
+function startIntro(now){
+  pieces=[]; walls.clear(); shards=[]; bursts=[]; turn=0; moveCount=0;
+  const cx=3, cy=3;
+  pieces.push({p:0, x:cx, y:cy, dx:cx, dy:cy});
+  introHero=pieces[0];
+  /* 週邊零星的棋子與牆，開場那幾步由它們演出 */
+  [[1,1,1],[6,2,2],[1,6,3],[5,6,2],[6,6,0]].forEach(([x,y,p])=>pieces.push({p, x, y, dx:x, dy:y}));
+  [[kH(1,1),1],[kV(6,2),2],[kH(1,6),3],[kV(2,1),1]].forEach(([k,p])=>walls.set(k,{p,t:0}));
+  armAlpha=0; hammerAng=REST_ANG; introSmashed=false; shake=0;
+  cageKeys=[]; introStage='play';
+  phase='idle'; t0=now;
+}
+
+/* 三步過後，四面牆一道一道彈出來把主角關住 */
+function buildCage(now){
+  const cx=introHero.x, cy=introHero.y;
+  cageKeys=[kH(cx,cy), kH(cx,cy+1), kV(cx,cy), kV(cx+1,cy)];
+  cageKeys.forEach((k,i)=>walls.set(k, {p:[1,2,3,1][i], t:now+i*90}));
+}
+
+/* 圓角矩形（舊瀏覽器沒有 roundRect 時退回直角） */
+function rrect(x,y,w,h,r){
+  ctx.beginPath();
+  if(ctx.roundRect) ctx.roundRect(x,y,w,h,r); else ctx.rect(x,y,w,h);
+}
+
+/* 手臂 + 槌子：以肩膀為支點旋轉，ang 為 0 時水平向右、負值往上舉 */
+function drawHammer(pc, ang, alpha){
+  if(alpha<=0.02) return;
+  const c=proj(pc.dx+.5, pc.dy+.5), rx=S*.26, h=S*.40;
+  const col=C.p[pc.p];
+  const sx=c.X+rx*0.72, sy=c.Y-h*0.58;
+  ctx.save(); ctx.globalAlpha=alpha;
+  ctx.translate(sx,sy); ctx.rotate(ang); ctx.lineCap='round';
+
+  /* 手臂 */
+  const armLen=S*0.26;
+  ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(armLen,0);
+  ctx.strokeStyle=C.edge; ctx.lineWidth=S*0.100; ctx.stroke();
+  ctx.strokeStyle=col.body; ctx.lineWidth=S*0.058; ctx.stroke();
+  /* 拳頭 */
+  ctx.beginPath(); ctx.arc(armLen,0,S*0.072,0,7);
+  ctx.fillStyle=col.top; ctx.fill();
+  ctx.strokeStyle=C.edge; ctx.lineWidth=2.4; ctx.stroke();
+
+  /* 槌柄 */
+  ctx.translate(armLen,0);
+  const hl=S*0.32, hw=S*0.052;
+  ctx.beginPath(); ctx.moveTo(-S*0.03,0); ctx.lineTo(hl,0);
+  ctx.strokeStyle=C.edge; ctx.lineWidth=hw+5; ctx.stroke();
+  ctx.strokeStyle='#c98b45'; ctx.lineWidth=hw; ctx.stroke();
+  /* 槌頭（與柄垂直的方塊） */
+  const hd=S*0.15, hh=S*0.30;
+  ctx.translate(hl,0);
+  rrect(-hd/2,-hh/2,hd,hh,S*0.035);
+  ctx.fillStyle='#586274'; ctx.fill();
+  ctx.strokeStyle=C.edge; ctx.lineWidth=2.8; ctx.stroke();
+  rrect(-hd/2,-hh/2,hd,hh*0.34,S*0.035);
+  ctx.fillStyle='#6f7a8d'; ctx.fill();
+  ctx.restore();
+}
+function smashWall(key, info, now){
+  const [xs,ys,d]=key.split(','); const x=+xs, y=+ys;
+  const col=C.p[info.p];
+  const cx = d==='H' ? x+0.5 : x;
+  const cy = d==='H' ? y : y+0.5;
+  bursts.push({x:cx, y:cy, t:now, col:'#ffffff', r0:0.10, r1:0.42, dur:240});
+  bursts.push({x:cx, y:cy, t:now, col:col.wall,  r0:0.14, r1:0.78, dur:520});
+  bursts.push({x:cx, y:cy, t:now, col:C.edge,    r0:0.12, r1:0.60, dur:400});
+  for(let i=0;i<24;i++){
+    const a=Math.random()*Math.PI*2, sp=0.010+Math.random()*0.026;
+    shards.push({
+      x: cx + (d==='H' ? (Math.random()-0.5)*0.9 : (Math.random()-0.5)*0.18),
+      y: cy + (d==='H' ? (Math.random()-0.5)*0.18 : (Math.random()-0.5)*0.9),
+      z: S*0.05 + Math.random()*S*0.24,
+      vx: Math.cos(a)*sp, vy: Math.sin(a)*sp*0.55,
+      vz: S*0.016 + Math.random()*S*0.038,
+      rot: Math.random()*Math.PI, vr:(Math.random()-0.5)*0.35,
+      w: S*(0.05+Math.random()*0.06), h: S*(0.035+Math.random()*0.05),
+      col: Math.random()<0.55 ? col.wall : col.wallSide,
+      life: 1
+    });
+  }
+}
+function stepShards(){
+  for(const p of shards){
+    p.x+=p.vx; p.y+=p.vy; p.z+=p.vz; p.vz-=S*0.0024; p.rot+=p.vr; p.life-=0.014;
+    if(p.z<0){ p.z=0; p.vz*=-0.34; p.vx*=0.66; p.vy*=0.66; p.vr*=0.6; }
+  }
+  if(shards.length) shards=shards.filter(p=>p.life>0);
+  if(bursts.length) bursts=bursts.filter(b=>performance.now()-b.t<b.dur);
+}
+function drawShards(now){
+  for(const b of bursts){
+    const age=Math.min((now-b.t)/b.dur,1);
+    const c=proj(b.x,b.y,S*0.10), r=S*(b.r0+(b.r1-b.r0)*(1-Math.pow(1-age,2)));
+    ctx.save(); ctx.globalAlpha=(1-age)*0.9;
+    ctx.beginPath(); ctx.ellipse(c.X,c.Y,r,r*SQUASH,0,0,7);
+    ctx.strokeStyle=b.col; ctx.lineWidth=Math.max(1,5*(1-age)); ctx.stroke();
+    ctx.restore();
+  }
+  for(const p of shards){
+    const c=proj(p.x,p.y,p.z);
+    ctx.save(); ctx.translate(c.X,c.Y); ctx.rotate(p.rot);
+    ctx.globalAlpha=Math.max(0,Math.min(1,p.life*1.5));
+    ctx.fillStyle=p.col; ctx.fillRect(-p.w/2,-p.h/2,p.w,p.h);
+    ctx.strokeStyle=C.edge; ctx.lineWidth=1.1; ctx.strokeRect(-p.w/2,-p.h/2,p.w,p.h);
+    ctx.restore();
+  }
+  ctx.globalAlpha=1;
+}
+/* 選一顆自己的棋子開始移動 */
+function startMove(now){
+  const side=turn%4;
+  let mine=pieces.filter(p=>p.p===side).filter(p=>reach(p).length);
+  if(introStage==='play') mine=mine.filter(p=>p!==introHero);   /* 主角先別動 */
+  if(!mine.length && introStage==='play'){ turn++; phase='idle'; t0=now; return; }
+  if(!mine.length){ phase='reset'; t0=now; return; }
+  actor=pick(mine); const paths=reach(actor);
+  path=pick(paths); from={x:actor.x,y:actor.y};
+  phase='move'; t0=now;
+}
+function nextTurn(now){
+  if(moveCount>=36){ phase='reset'; t0=now; return; }
+  const side=turn%4;
+  /* 破牆：每色一局限一次，且與上次破牆至少隔 4 步，不會連續發生。
+     破牆只是回合中的一個動作，敲完由同一位玩家接著移動、建牆。 */
+  if(!introStage && breakers[side] && walls.size>=4 && moveCount-lastBreak>=4){
+    const owned=[...walls.entries()].filter(([k,v])=>v.p===side);
+    if(owned.length && Math.random()<0.3){
+      breakers[side]=false; lastBreak=moveCount;
+      const [k,info]=pick(owned);
+      walls.delete(k); smashWall(k, info, now);
+      phase='break'; t0=now; return;
+    }
+  }
+  startMove(now);
+}
+const easeIO=t=>t<.5?2*t*t:1-Math.pow(-2*t+2,2)/2;
+const easeBack=t=>1+2.2*Math.pow(t-1,3)+1.4*Math.pow(t-1,2);
+
+function step(now){
+  const el=now-t0;
+  stepShards();
+  if(shake>0) shake=Math.max(0, shake-0.019);
+  if(phase==='introPending'){ startIntro(now); }
+  else if(phase==='introTrap'){
+    /* 掙扎：左右抖動 */
+    introHero.dx = introHero.x + Math.sin(el/52)*0.05;
+    if(el>620){ introHero.dx=introHero.x; phase='introRaise'; t0=now; }
+  }
+  else if(phase==='introRaise'){
+    /* 把槌子高高舉起，身體微微後仰蓄力 */
+    const k=Math.min(el/560,1), e=1-Math.pow(1-k,3);
+    hammerAng = REST_ANG + (RAISE_ANG-REST_ANG)*e;
+    armAlpha = Math.min(1, el/160);
+    introHero.dx = introHero.x - 0.045*e;
+    if(k===1){ phase='introHold'; t0=now; }
+  }
+  else if(phase==='introHold'){
+    /* 舉在最高點停一拍，槌子微微顫抖 */
+    hammerAng = RAISE_ANG + Math.sin(el/28)*0.035;
+    if(el>200){ phase='introSlam'; t0=now; }
+  }
+  else if(phase==='introSlam'){
+    /* 用力往下砸 */
+    const k=Math.min(el/130,1), e=k*k;
+    hammerAng = RAISE_ANG + (SLAM_ANG-RAISE_ANG)*e;
+    introHero.dx = introHero.x - 0.045*(1-e);
+    if(k===1 && !introSmashed){
+      introSmashed=true;
+      shake=1;                                        /* 整個畫面震動 */
+      impact={x:introHero.x+0.5, y:introHero.y+0.5, t:now};   /* 震央 */
+      /* 只敲碎槌子那一側（右邊）的那一道牆 */
+      const wk=cageKeys[3], info=walls.get(wk);
+      if(info){ walls.delete(wk); smashWall(wk, info, now); }
+      if(typeof onIntroBreak==='function') onIntroBreak();
+    }
+    if(el>330){ phase='introFree'; t0=now; }
+  }
+  else if(phase==='introFree'){
+    /* 收槌，從破口往右逃出去 */
+    armAlpha = Math.max(0, 1-el/300);
+    hammerAng = SLAM_ANG - 0.9*Math.min(1, el/300);
+    const k=Math.min(el/700,1), e=easeIO(k);
+    introHero.dx = introHero.x + e;
+    if(k===1){
+      /* 不重置棋盤，就從這個局面接著下 */
+      introHero.x += 1; introHero.dx = introHero.x;
+      introHero=null; armAlpha=0; introStage=null; phase='idle'; t0=now;
+    }
+  }
+  else if(phase==='break' && el>900){ startMove(now); }
+  else if(phase==='idle' && el>(introStage==='play'?260:820)) nextTurn(now);
+  else if(phase==='move'){
+    const k=Math.min(el/(introStage==='play'?470:620),1), e=easeIO(k), seg=path.length, f=e*seg;
+    const i=Math.min(Math.floor(f),seg-1), lf=f-i;
+    const a=i===0?[from.x,from.y]:path[i-1], b=path[i];
+    actor.dx=a[0]+(b[0]-a[0])*lf; actor.dy=a[1]+(b[1]-a[1])*lf;
+    if(k===1){
+      const end=path[seg-1]; actor.x=end[0]; actor.y=end[1]; actor.dx=end[0]; actor.dy=end[1];
+      const sp=wallSpots(actor.x,actor.y);
+      if(sp.length){ newWall=pick(sp); walls.set(newWall,{p:actor.p,t:now}); }
+      phase='wall'; t0=now;
+    }
+  }
+  else if(phase==='wall' && el>(introStage==='play'?350:520)){
+    turn++; moveCount++;
+    if(introStage==='play' && moveCount>=INTRO_MOVES){
+      introStage='cage'; buildCage(now); phase='introCage'; t0=now;
+    } else { phase='idle'; t0=now; }
+  }
+  else if(phase==='introCage' && el>780){ introStage='act'; phase='introTrap'; t0=now; }
+  else if(phase==='reset'){
+    fade=Math.min(el/700,1);
+    if(fade===1){ initBg(); shards=[]; bursts=[]; fade=0; phase='idle'; t0=now; }
+  }
+}
+
+/* 繪圖 */
+function poly(pts){ ctx.beginPath(); ctx.moveTo(pts[0].X,pts[0].Y);
+  for(let i=1;i<pts.length;i++) ctx.lineTo(pts[i].X,pts[i].Y); ctx.closePath(); }
+
+function drawBoard(){
+  const c=[proj(0,0),proj(N,0),proj(N,N),proj(0,N)];
+  ctx.save(); ctx.shadowColor='rgba(70,28,8,.5)'; ctx.shadowBlur=50; ctx.shadowOffsetY=22;
+  poly([proj(-.35,-.35),proj(N+.35,-.35),proj(N+.35,N+.35),proj(-.35,N+.35)]);
+  ctx.fillStyle=C.rim; ctx.fill(); ctx.restore();
+
+  for(let y=0;y<N;y++) for(let x=0;x<N;x++){
+    poly([proj(x,y),proj(x+1,y),proj(x+1,y+1),proj(x,y+1)]);
+    ctx.fillStyle=(x+y)%2 ? C.dark : C.light; ctx.fill();
+  }
+  poly(c); ctx.strokeStyle='rgba(19,41,75,.55)'; ctx.lineWidth=2; ctx.stroke();
+}
+
+function box(bx0,by0,bx1,by1,h,side,top,base=0){
+  const b=[proj(bx0,by0,base),proj(bx1,by0,base),proj(bx1,by1,base),proj(bx0,by1,base)];
+  const u=[proj(bx0,by0,base+h),proj(bx1,by0,base+h),proj(bx1,by1,base+h),proj(bx0,by1,base+h)];
+  const faces=[0,1,2,3].map(i=>({q:[b[i],b[(i+1)%4],u[(i+1)%4],u[i]],
+    d:(b[i].Y+b[(i+1)%4].Y)/2}));
+  faces.sort((a,c)=>a.d-c.d);
+  /* 不逐塊描邊：相鄰同色牆才能無縫接成一整條，交叉口也不會有接縫 */
+  ctx.fillStyle=side;
+  faces.forEach(f=>{ poly(f.q); ctx.fill(); });
+  poly(u); ctx.fillStyle=top; ctx.fill();
+}
+
+function drawWall(key, info, now){
+  const [xs,ys,d]=key.split(','); const x=+xs,y=+ys;
+  const age=Math.min((now-info.t)/420,1);
+  let h=S*0.30*(info.t?easeBack(age):1);
+  if(phase==='reset') h*=1-fade;
+  if(h<=0.5) return;
+  const t=0.075, col=C.p[info.p];
+  const lift = d==='H' ? joltZ(x+0.5,y) : joltZ(x,y+0.5);
+  /* 長度剛好一格，不外推，才不會比棋盤格還寬 */
+  if(d==='H') box(x,y-t,x+1,y+t,h,col.wallSide,col.wall,lift);
+  else box(x-t,y,x+t,y+1,h,col.wallSide,col.wall,lift);
+}
+
+function drawPiece(pc){
+  const rx=S*.26, ry=rx*SQUASH, h=S*.40;
+  const lift=joltZ(pc.dx+.5, pc.dy+.5);
+  const g=proj(pc.dx+.5,pc.dy+.5);            /* 地面位置（影子） */
+  const c=proj(pc.dx+.5,pc.dy+.5,lift);       /* 被震起後的位置 */
+  const col=C.p[pc.p];
+  const k=1-Math.min(lift/(S*0.45),0.55);     /* 飛越高，影子越小越淡 */
+  ctx.save(); ctx.globalAlpha=.22*k; ctx.fillStyle='#16253d';
+  ctx.beginPath(); ctx.ellipse(g.X+S*.06,g.Y+S*.03,rx*1.12*k,ry*1.1*k,0,0,7); ctx.fill(); ctx.restore();
+  /* 柱身（含描邊） */
+  ctx.beginPath();
+  ctx.moveTo(c.X-rx, c.Y-h); ctx.lineTo(c.X-rx, c.Y);
+  ctx.ellipse(c.X, c.Y, rx, ry, 0, Math.PI, 0, true);
+  ctx.lineTo(c.X+rx, c.Y-h); ctx.closePath();
+  ctx.fillStyle=col.body; ctx.fill();
+  ctx.strokeStyle=C.edge; ctx.lineWidth=2; ctx.stroke();
+  /* 頂面 */
+  ctx.beginPath(); ctx.ellipse(c.X,c.Y-h,rx,ry,0,0,7);
+  ctx.fillStyle=col.top; ctx.fill(); ctx.strokeStyle=C.edge; ctx.lineWidth=2; ctx.stroke();
+  ctx.beginPath(); ctx.ellipse(c.X,c.Y-h,rx*.45,ry*.45,0,0,7);
+  ctx.strokeStyle='rgba(22,37,61,.35)'; ctx.lineWidth=1.4; ctx.stroke();
+}
+
+function draw(now){
+  NOW=now;
+  ctx.clearRect(0,0,W,H);
+  ctx.save();
+  if(shake>0){                       /* 重擊的螢幕震動 + 推鏡 */
+    const a=shake*shake*S*0.42, z=1+shake*shake*0.06;
+    ctx.translate(W/2,H/2); ctx.scale(z,z); ctx.translate(-W/2,-H/2);
+    ctx.translate((Math.random()-0.5)*a, (Math.random()-0.5)*a*0.72);
+  }
+  drawBoard();
+  const items=[];
+  walls.forEach((v,k)=>{ const [x,y,d]=k.split(','); items.push({d:+y+(d==='V'?1:0), fn:()=>drawWall(k,v,now)}); });
+  pieces.forEach(p=>items.push({d:p.dy+.55, fn:()=>drawPiece(p)}));
+  items.sort((a,b)=>a.d-b.d).forEach(i=>i.fn());
+  if(introHero) drawHammer(introHero, hammerAng, armAlpha);
+  if(shards.length||bursts.length) drawShards(now);
+  ctx.restore();
+}
+
+function drawStatic(){
+  initBg();
+  for(let i=0;i<9;i++){ const p=pick(pieces); const s=wallSpots(p.x,p.y); if(s.length) walls.set(pick(s),{p:p.p,t:0}); }
+  draw(0);
+}
+
+let rafId=null;
+function startLoop(){
+  if(rafId!==null) return;
+  (function loop(now){ step(now); draw(now); rafId=requestAnimationFrame(loop); })(performance.now());
+}
+function stopLoop(){ if(rafId!==null){ cancelAnimationFrame(rafId); rafId=null; } }
+
+initBg();
+if(REDUCED) drawStatic();
+else { if(!HAS_SESSION){ phase='introPending'; } startLoop(); }
+addEventListener('resize',()=>{ if(REDUCED) draw(0); });
+
+function toggleAnim(){
+  REDUCED = !REDUCED;
+  localStorage.setItem('wallGoAnim', REDUCED ? 'off' : 'on');
+  if(REDUCED){ stopLoop(); drawStatic(); toast('背景動畫已關閉'); }
+  else { initBg(); startLoop(); toast('背景動畫已開啟'); }
+  syncSettingsUI();
+}
+
+/* ═════════ 共用 UI ═════════ */
+const toastEl=document.getElementById('toast');
+let tid;
+function toast(msg){
+  toastEl.textContent=msg; toastEl.classList.add('on');
+  clearTimeout(tid); tid=setTimeout(()=>toastEl.classList.remove('on'),2400);
+}
+
+function openModal(id){ document.getElementById(id).classList.add('on'); }
+function closeModal(id){ document.getElementById(id).classList.remove('on'); }
+function closeAllModals(){ document.querySelectorAll('.scrim.on').forEach(s=>s.classList.remove('on')); }
+
+document.querySelectorAll('.scrim').forEach(s=>{
+  s.addEventListener('click', e=>{ if(e.target===s) s.classList.remove('on'); });
+});
+addEventListener('keydown', e=>{ if(e.key==='Escape') closeAllModals(); });
+
+/* ═════════ 帳號 / 大廳資料 ═════════ */
+let currentUser = null;
+let selectedPlayers = 3;
+let globalHistoryData = [];
+
+const API_URL = 'https://wallgo-play.onrender.com';
+const socket = io(API_URL);
+let currentRoomCode = null;
+
+socket.on('connect', ()=>{ const el=document.getElementById('conn-state'); if(el) el.textContent='已連線'; });
+socket.on('disconnect', ()=>{ const el=document.getElementById('conn-state'); if(el) el.textContent='已斷線'; });
+
+/* 左側選單 / 工具列 / 開始鍵 */
+document.querySelectorAll('[data-act]').forEach(b=>b.onclick=()=>{
+  const a=b.dataset.act;
+  if(a==='start')      startGame();
+  if(a==='solo')       openSoloModal();
+  if(a==='room')       openRoomModal();
+  if(a==='friend')     openFriendList();
+  if(a==='history')    openHistoryModal();
+  if(a==='me')         openMeModal();
+  if(a==='settings')   { syncSettingsUI(); openModal('settings-modal'); }
+  if(a==='help')       openModal('rules-modal');
+  if(a==='info')       openModal('info-modal');
+});
+
+/* ═════════ 單機遊戲 ═════════ */
+function setPlayers(val){
+  selectedPlayers = val;
+  document.querySelectorAll('.pc').forEach(opt=>{
+    opt.classList.toggle('active', String(opt.dataset.val) === String(val));
+  });
+  document.querySelectorAll('#solo-chips .chip').forEach(c=>{
+    c.setAttribute('aria-pressed', String(c.dataset.val) === String(val) ? 'true' : 'false');
+  });
+}
+document.querySelectorAll('#solo-chips .chip').forEach(c=>{
+  c.onclick=()=>setPlayers(c.dataset.val === 'ai' ? 'ai' : Number(c.dataset.val));
+});
+function openSoloModal(){ setPlayers(selectedPlayers); openModal('solo-modal'); }
+function startGame(){ window.location.href = `game.html?players=${selectedPlayers}`; }
+
+/* ═════════ 線上房間 ═════════ */
+function openRoomModal(){
+  openModal('room-modal');
+  document.getElementById('room-ui-main').style.display = 'block';
+  document.getElementById('room-ui-waiting').style.display = 'none';
+}
+
+function createRoom(){
+  const roomCode = Math.floor(1000 + Math.random() * 9000).toString();
+  const userInfo = { id: currentUser.id, name: currentUser.name, avatar: currentUser.avatar };
+  currentRoomCode = roomCode;
+  socket.emit('create_room', { room_code: roomCode, user_info: userInfo });
+}
+
+function joinRoom(){
+  const roomCode = document.getElementById('join-room-input').value.trim();
+  if (roomCode.length !== 4) return toast('請輸入 4 位數字的房間代碼！');
+  const userInfo = { id: currentUser.id, name: currentUser.name, avatar: currentUser.avatar };
+  currentRoomCode = roomCode;
+  socket.emit('join_room', { room_code: roomCode, user_info: userInfo });
+}
+
+function leaveRoom(){
+  if (currentRoomCode) {
+    socket.emit('leave_room', { room_code: currentRoomCode, user_id: currentUser.id });
+    currentRoomCode = null;
+  }
+  openRoomModal();
+}
+
+socket.on('room_created', (data) => {
+  currentRoomCode = data.room_code;
+  renderWaitingRoom(data.room_code, data.players);
+});
+
+socket.on('room_updated', (data) => {
+  if (currentRoomCode === data.room_code) renderWaitingRoom(data.room_code, data.players);
+});
+
+socket.on('join_error', (data) => {
+  toast(data.message);
+  currentRoomCode = null;
+});
+
+function renderWaitingRoom(code, players){
+  openModal('room-modal');
+  document.getElementById('room-ui-main').style.display = 'none';
+  document.getElementById('room-ui-waiting').style.display = 'block';
+
+  document.getElementById('display-room-code').innerText = code;
+  document.getElementById('room-player-count').innerText = players.length;
+
+  const list = document.getElementById('room-players-list');
+  list.innerHTML = players.map(p => `
+    <div class="pitem">
+      <div class="ava">${esc(p.avatar)}</div>
+      <div>
+        <div class="nm">${esc(p.name)} ${p.id === currentUser.id ? '（你）' : ''}</div>
+        <div class="idz">${esc(p.id)}</div>
+      </div>
+    </div>`).join('');
+
+  document.getElementById('btn-start-online').disabled = (players.length < 2);
+}
+
+function startOnlineGame(){
+  if (currentRoomCode) socket.emit('start_game', { room_code: currentRoomCode });
+}
+
+socket.on('game_started', (data) => {
+  window.location.href = `game.html?mode=online&room=${data.room_code}&players=${data.player_count}`;
+});
+
+/* ═════════ 登入 / 註冊 ═════════ */
+function switchAuthTab(type){
+  const tabs = document.querySelectorAll('.tab');
+  document.querySelectorAll('.form').forEach(f=>f.classList.remove('active'));
+  tabs.forEach(t=>t.classList.remove('active'));
+  if (type === 'login'){ tabs[0].classList.add('active'); document.getElementById('form-login').classList.add('active'); }
+  else { tabs[1].classList.add('active'); document.getElementById('form-register').classList.add('active'); }
+}
+
+async function performLogin(){
+  const id = document.getElementById('login-id').value.trim();
+  const pwd = document.getElementById('login-pwd').value.trim();
+
+  if (!id || !pwd) return toast('ID 與密碼都不能為空！');
+  if (!id.startsWith('#')) return toast('ID 格式錯誤，必須包含 # 號（例如 #1234）');
+
+  try {
+    const response = await fetch(`${API_URL}/api/login`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: id, password: pwd })
+    });
+    const result = await response.json();
+    if (result.success) {
+      currentUser = { ...result.user };
+      localStorage.setItem('wallGoSession', JSON.stringify(currentUser));
+      document.getElementById('login-pwd').value = '';
+      checkLogin();
+      loadHistory();
+    } else toast(result.message);
+  } catch (error) { toast('無法連線到伺服器，請確認後端已成功啟動！'); }
+}
+
+async function performRegister(){
+  const name = document.getElementById('reg-name').value.trim();
+  const pwd = document.getElementById('reg-pwd').value.trim();
+
+  if (!name || !pwd) return toast('暱稱與密碼都不能為空！');
+  let randomId = '#' + Math.floor(1000 + Math.random() * 9000);
+
+  try {
+    const response = await fetch(`${API_URL}/api/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: randomId, username: name, password: pwd })
+    });
+    const result = await response.json();
+    if (result.success) {
+      alert(`註冊成功！寫入資料庫完畢。\n\n你的專屬玩家 ID 是：${result.user.id}\n請務必牢記你的 ID 與密碼。`);
+      currentUser = { ...result.user };
+      localStorage.setItem('wallGoSession', JSON.stringify(currentUser));
+      document.getElementById('reg-name').value = '';
+      document.getElementById('reg-pwd').value = '';
+      checkLogin();
+      loadHistory();
+    } else toast(result.message);
+  } catch (error) { toast('無法連線到伺服器，請確認後端已成功啟動！'); }
+}
+
+function handleForgotPassword(){
+  const loginId = document.getElementById('login-id').value.trim();
+  if (loginId) document.getElementById('forgot-pwd-id').value = loginId;
+  document.getElementById('forgot-pwd-new').value = '';
+  openModal('forgot-pwd-modal');
+}
+
+async function resetPassword(){
+  const loginId = document.getElementById('forgot-pwd-id').value.trim();
+  const newPwd = document.getElementById('forgot-pwd-new').value.trim();
+
+  if (!loginId || !newPwd) return toast('玩家 ID 與新密碼都不能為空！');
+
+  try {
+    const response = await fetch(`${API_URL}/api/reset_password`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: loginId, new_password: newPwd })
+    });
+    const result = await response.json();
+    toast(result.message);
+    if (result.success) {
+      closeModal('forgot-pwd-modal');
+      document.getElementById('login-pwd').value = '';
+    }
+  } catch (error) { toast('無法連線到伺服器，請確認後端已成功啟動！'); }
+}
+
+/* 開場動畫的接力點：畫布把牆打破時呼叫，UI 才開始滑入 */
+function onIntroBreak(){
+  const el=document.getElementById('auth-page');
+  el.classList.remove('intro-wait');
+  el.classList.add('intro-play');
+  setTimeout(()=>el.classList.remove('intro-play'), 1800);
+}
+
+function checkLogin(){
+  const savedSession = localStorage.getItem('wallGoSession');
+  if (savedSession) {
+    currentUser = JSON.parse(savedSession);
+    document.getElementById('auth-page').classList.remove('on');
+    document.getElementById('stage').classList.add('on');
+    updateProfileUI();
+  } else {
+    const el=document.getElementById('auth-page');
+    /* 開場動畫播完前先藏著；不播動畫時直接顯示 */
+    if(!REDUCED && !el.classList.contains('intro-play')) el.classList.add('intro-wait');
+    el.classList.add('on');
+    document.getElementById('stage').classList.remove('on');
+  }
+}
+
+function logout(){
+  if (confirm('確定要登出帳號嗎？')) {
+    localStorage.removeItem('wallGoSession');
+    location.reload();
+  }
+}
+
+function updateProfileUI(){
+  document.getElementById('display-name').innerText = currentUser.name;
+  document.getElementById('display-id').innerText = `ID: ${currentUser.id}`;
+  document.getElementById('display-avatar').innerText = currentUser.avatar;
+}
+
+function openProfileEditor(){
+  closeModal('me-modal');
+  document.getElementById('input-name').value = currentUser.name;
+  document.getElementById('input-avatar').value = currentUser.avatar;
+  openModal('profile-modal');
+}
+
+async function saveProfile(){
+  const newName = document.getElementById('input-name').value.trim();
+  const newAvatar = document.getElementById('input-avatar').value.trim();
+  if (!newName) return toast('暱稱不能為空！');
+
+  currentUser.name = newName;
+  currentUser.avatar = newAvatar || newName.charAt(0).toUpperCase();
+
+  localStorage.setItem('wallGoSession', JSON.stringify(currentUser));
+  updateProfileUI();
+  closeModal('profile-modal');
+
+  try {
+    await fetch(`${API_URL}/api/update_profile`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: currentUser.id, username: currentUser.name, avatar: currentUser.avatar })
+    });
+    toast('個人資料已更新');
+  } catch (e) { toast('已更新本機資料，但雲端同步失敗'); }
+}
+
+/* ═════════ 歷史戰績 ═════════ */
+function openHistoryModal(){ openModal('history-modal'); loadHistory(); }
+
+function openMeModal(){
+  document.getElementById('me-name').innerText = currentUser.name;
+  document.getElementById('me-id').innerText = `ID: ${currentUser.id}`;
+  openModal('me-modal');
+}
+
+async function loadHistory(){
+  if (!currentUser) return;
+  const listEl = document.getElementById('history-list');
+
+  try {
+    const response = await fetch(`${API_URL}/api/get_history`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: currentUser.id })
+    });
+    const result = await response.json();
+    if (!result.success) return;
+
+    const history = result.history;
+    globalHistoryData = history;
+    let wins = 0;
+
+    let localReplays = {};
+    try { localReplays = JSON.parse(localStorage.getItem('wallGoReplays') || '{}'); } catch(e) {}
+
+    if (history.length === 0) {
+      renderStats(0, 0);
+      listEl.innerHTML = '<div class="empty">尚無比賽紀錄<br>趕快開始第一場對戰吧！</div>';
+      document.getElementById('feed-list').innerHTML = '<li><span>尚無戰報，開一局來寫下第一筆吧。</span></li>';
+      document.getElementById('me-last').innerText = '—';
+      document.getElementById('menu-history-sub').innerText = '尚無對局紀錄';
+      return;
+    }
+
+    let rows = '';
+    history.slice().reverse().forEach((record, revIdx) => {
+      const originalIndex = history.length - 1 - revIdx;
+      if (record.winner.includes('(你)')) wins++;
+
+      const recordKey = record.winScore + '_' + (record.details || '').replace(/\s+/g, '');
+      if (!record.replayData && localReplays[recordKey]) {
+        record.replayData = localReplays[recordKey];
+        globalHistoryData[originalIndex].replayData = localReplays[recordKey];
+      }
+
+      const replayBtn = record.replayData
+        ? `<button class="mini" onclick="openReplay(${originalIndex})">查看覆盤</button>`
+        : `<span class="idz">無覆盤</span>`;
+
+      rows += `
+        <div class="hitem">
+          <div>
+            <div class="hd">${esc(record.date)}</div>
+            <div class="hw">${esc(record.winner)} <span class="hs">（${esc(String(record.winScore))} 格）</span></div>
+            <div class="hs">${esc(record.details || '')}</div>
+          </div>
+          <div class="act">${replayBtn}</div>
+        </div>`;
+    });
+    listEl.innerHTML = rows;
+
+    renderStats(history.length, wins);
+    renderFeed(history);
+  } catch (error) {
+    listEl.innerHTML = '<div class="empty" style="color:var(--rust)">戰績載入失敗，請檢查連線。</div>';
+    document.getElementById('feed-list').innerHTML = '<li><span style="color:var(--rust)">戰報載入失敗，請檢查連線。</span></li>';
+  }
+}
+
+function renderStats(total, wins){
+  const rate = total ? Math.round((wins / total) * 100) : 0;
+  document.getElementById('win-rate').innerText = `${rate}%`;
+  document.getElementById('total-games').innerText = total;
+  document.getElementById('total-wins').innerText = wins;
+  document.getElementById('total-loses').innerText = total - wins;
+
+  document.getElementById('h-total').innerText = `${total} 場`;
+  document.getElementById('h-rate').innerText = `${rate}%`;
+
+  document.getElementById('me-total').innerText = total;
+  document.getElementById('me-wl').innerText = `${wins} / ${total - wins}`;
+  document.getElementById('me-rate').innerText = `${rate}%`;
+  document.getElementById('menu-history-sub').innerText = `${total} 場對局 ・ 勝率 ${rate}%`;
+}
+
+function renderFeed(history){
+  const latest = history.slice(-3).reverse();
+  document.getElementById('feed-list').innerHTML = latest.map(r => `
+    <li><span><b>${esc(r.winner)}</b> 以 ${esc(String(r.winScore))} 格圍地獲勝</span><em>${esc(String(r.date).split(' ')[0] || '')}</em></li>`).join('');
+  document.getElementById('me-last').innerText = latest.length ? latest[0].winner : '—';
+}
+
+async function clearHistory(){
+  if (!confirm('確定要清除所有的歷史戰績嗎？雲端資料刪除後無法復原！')) return;
+  try {
+    await fetch(`${API_URL}/api/clear_history`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: currentUser.id })
+    });
+    localStorage.removeItem('wallGoReplays');
+    loadHistory();
+    toast('已清除所有戰績紀錄');
+  } catch (error) { toast('清除失敗，請檢查連線！'); }
+}
+
+/* ═════════ 覆盤播放器 ═════════ */
+let currentReplayData = [];
+let currentStepIndex = 0;
+const replayBoardSize = 13;
+
+function openReplay(historyIndex){
+  const record = globalHistoryData[historyIndex];
+  if (!record || !record.replayData) return toast('這局遊戲沒有紀錄到覆盤資料！');
+
+  currentReplayData = JSON.parse(record.replayData);
+  currentStepIndex = currentReplayData.length - 1;
+
+  closeModal('history-modal');
+  openModal('replay-modal');
+  initReplayBoard();
+  renderReplayStep();
+}
+
+function closeReplay(){
+  closeModal('replay-modal');
+  currentReplayData = [];
+  openModal('history-modal');
+}
+
+function initReplayBoard(){
+  const boardEl = document.getElementById('replay-board');
+  boardEl.innerHTML = '';
+  for (let r = 0; r < replayBoardSize; r++) {
+    for (let c = 0; c < replayBoardSize; c++) {
+      const div = document.createElement('div');
+      div.classList.add('grid-item');
+      div.dataset.r = r; div.dataset.c = c;
+
+      if (r % 2 === 0 && c % 2 === 0) div.classList.add('cell');
+      else if (r % 2 !== 0 && c % 2 === 0) div.classList.add('wall-h');
+      else if (r % 2 === 0 && c % 2 !== 0) div.classList.add('wall-v');
+      else div.classList.add('intersection');
+
+      boardEl.appendChild(div);
+    }
+  }
+}
+
+function changeReplayStep(delta){
+  const newIndex = currentStepIndex + delta;
+  if (newIndex >= 0 && newIndex < currentReplayData.length) {
+    currentStepIndex = newIndex;
+    renderReplayStep();
+  }
+}
+
+function renderReplayStep(){
+  const boardEl = document.getElementById('replay-board');
+  const stepData = currentReplayData[currentStepIndex];
+
+  boardEl.querySelectorAll('.grid-item').forEach(el => {
+    el.innerHTML = '';
+    el.classList.remove('wall-placed','wall-red','wall-blue','wall-yellow','wall-green','wall-broken-highlight');
+  });
+
+  stepData.walls.forEach(wall => {
+    const [wKey, color] = wall;
+    const [wr, wc] = wKey.split(',').map(Number);
+    const wEl = boardEl.querySelector(`[data-r="${wr}"][data-c="${wc}"]`);
+    if (wEl) wEl.classList.add('wall-placed', `wall-${color}`);
+  });
+
+  // 動態比對破牆：上一步有、這一步沒有的牆，標記為被打破
+  if (currentStepIndex > 0) {
+    const prevWalls = new Map(currentReplayData[currentStepIndex - 1].walls);
+    const currWalls = new Map(stepData.walls);
+    prevWalls.forEach((color, key) => {
+      if (!currWalls.has(key)) {
+        const [wr, wc] = key.split(',').map(Number);
+        const wEl = boardEl.querySelector(`[data-r="${wr}"][data-c="${wc}"]`);
+        if (wEl) wEl.classList.add('wall-broken-highlight');
+      }
+    });
+  }
+
+  stepData.pieces.forEach(p => {
+    const cell = boardEl.querySelector(`[data-r="${p.r}"][data-c="${p.c}"]`);
+    if (cell) {
+      const pieceDiv = document.createElement('div');
+      pieceDiv.classList.add('piece', `piece-${p.color}`);
+      cell.appendChild(pieceDiv);
+    }
+  });
+
+  document.getElementById('replay-step-display').innerText = `${currentStepIndex} / ${currentReplayData.length - 1}`;
+  const prev = document.getElementById('btn-prev-step'), next = document.getElementById('btn-next-step');
+  prev.disabled = (currentStepIndex === 0);
+  next.disabled = (currentStepIndex === currentReplayData.length - 1);
+  prev.style.opacity = prev.disabled ? '.45' : '1';
+  next.style.opacity = next.disabled ? '.45' : '1';
+}
+
+/* ═════════ 好友系統 ═════════ */
+async function openFriendList(){
+  closeModal('me-modal');
+  openModal('friends-modal');
+  document.getElementById('friend-list-render').innerHTML = '<p class="empty">載入中…</p>';
+  await fetchFriends();
+}
+
+async function fetchFriends(){
+  if (!currentUser) return;
+  try {
+    const res = await fetch(`${API_URL}/api/get_friends`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: currentUser.id })
+    });
+    const result = await res.json();
+    if (result.success) renderFriendsUI(result.friends, result.pending_sent, result.pending_received);
+  } catch(e) {
+    document.getElementById('friend-list-render').innerHTML = '<p class="empty" style="color:var(--rust)">載入失敗，請檢查連線。</p>';
+  }
+}
+
+function renderFriendsUI(friends, pendingSent, pendingReceived){
+  let html = '';
+
+  if (pendingReceived.length > 0) {
+    html += `<div class="grouplbl">待您審核的邀請</div><div class="rlist">`;
+    pendingReceived.forEach(f => {
+      html += `
+        <div class="pitem" style="border-color:var(--brass)">
+          <div class="ava">${esc(f.avatar)}</div>
+          <div><div class="nm">${esc(f.name)}</div><div class="idz">${esc(f.id)}</div></div>
+          <div class="act">
+            <button class="mini ok" onclick="handleFriendReq('${esc(f.id)}','accept')">同意</button>
+            <button class="mini no" onclick="handleFriendReq('${esc(f.id)}','reject')">拒絕</button>
+          </div>
+        </div>`;
+    });
+    html += `</div>`;
+  }
+
+  if (pendingSent.length > 0) {
+    html += `<div class="grouplbl">等待對方同意</div><div class="rlist">`;
+    pendingSent.forEach(f => {
+      html += `
+        <div class="pitem" style="opacity:.6">
+          <div class="ava">${esc(f.avatar)}</div>
+          <div><div class="nm">${esc(f.name)}</div><div class="idz">${esc(f.id)}</div></div>
+          <div class="act"><span class="idz">等待中…</span></div>
+        </div>`;
+    });
+    html += `</div>`;
+  }
+
+  html += `<div class="grouplbl">我的正式好友</div>`;
+  if (friends.length === 0) {
+    html += `<p class="empty">目前還沒有好友喔！<br>輸入上方 ID 加朋友吧。</p>`;
+  } else {
+    html += `<div class="rlist">`;
+    friends.forEach(f => {
+      html += `
+        <div class="pitem">
+          <div class="ava">${esc(f.avatar)}</div>
+          <div><div class="nm">${esc(f.name)}<span class="dot"></span></div><div class="idz">${esc(f.id)}</div></div>
+          <div class="act"><button class="mini" onclick="inviteFriend('${esc(f.id)}')">邀請對戰</button></div>
+        </div>`;
+    });
+    html += `</div>`;
+  }
+
+  document.getElementById('friend-list-render').innerHTML = html;
+  document.getElementById('menu-friend-sub').innerText =
+    `${friends.length} 位好友` + (pendingReceived.length ? ` ・ ${pendingReceived.length} 則待審核` : '');
+}
+
+function inviteFriend(friendId){
+  closeModal('friends-modal');
+  openRoomModal();
+  createRoom();
+  toast(`房間建立後，把代碼傳給 ${friendId} 就能入座！`);
+}
+
+async function sendFriendRequest(){
+  const targetId = document.getElementById('add-friend-input').value.trim();
+  if (!targetId.startsWith('#')) return toast('ID 格式錯誤（需包含 #，例如 #1234）');
+
+  try {
+    const res = await fetch(`${API_URL}/api/send_friend_request`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ requester_id: currentUser.id, receiver_id: targetId })
+    });
+    const result = await res.json();
+    toast(result.message);
+    if (result.success) {
+      document.getElementById('add-friend-input').value = '';
+      fetchFriends();
+    }
+  } catch(e) { toast('連線失敗，請稍後再試！'); }
+}
+
+async function handleFriendReq(requesterId, action){
+  try {
+    const res = await fetch(`${API_URL}/api/handle_friend_request`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ requester_id: requesterId, receiver_id: currentUser.id, action: action })
+    });
+    const result = await res.json();
+    if (result.success) fetchFriends();
+    else toast(result.message);
+  } catch(e) { toast('連線失敗！'); }
+}
+
+/* ═════════ 設定 / 音樂 ═════════ */
+const muteBtn = document.getElementById('mute');
+if (localStorage.getItem('wallGoMusic') === 'off') muteBtn.classList.add('off');
+muteBtn.onclick = () => toggleMusic();
+
+function toggleMusic(){
+  muteBtn.classList.toggle('off');
+  const off = muteBtn.classList.contains('off');
+  localStorage.setItem('wallGoMusic', off ? 'off' : 'on');
+  toast(off ? '音樂已關閉' : '音樂已開啟');
+  syncSettingsUI();
+}
+
+function syncSettingsUI(){
+  document.getElementById('set-anim').innerText = REDUCED ? '關閉' : '開啟';
+  document.getElementById('set-music').innerText = muteBtn.classList.contains('off') ? '關閉' : '開啟';
+}
+
+/* ═════════ 小工具 ═════════ */
+function esc(str){
+  return String(str ?? '').replace(/[&<>"']/g, ch =>
+    ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[ch]));
+}
+
+window.onload = () => {
+  checkLogin();
+  syncSettingsUI();
+  if (currentUser) loadHistory();
+};
+</script>
+</body>
+</html>

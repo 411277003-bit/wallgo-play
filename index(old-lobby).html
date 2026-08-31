@@ -1,0 +1,1037 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>牆壁戰棋 (Wall Go) - 遊戲大廳</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@500;700;900&family=Noto+Sans+TC:wght@400;500;700&display=swap');
+
+        :root {
+            --bg-color: #f5f0ea;         
+            --card-bg: #ffffff;          
+            --card-border: #e0d5c1;      
+            --text-main: #4a3623;        
+            --text-sub: #8c735a;         
+            --primary: #8c735a;          
+            --success: #5c4530;          
+            --danger: #b5655d;           
+            
+            --btn-brown-light: #9c8065;  
+            --btn-brown-dark: #5c4530;   
+            --btn-beige: #ebe4d8;        
+
+            /* 覆盤需要用到的顏色 */
+            --color-red: #d15645;
+            --color-blue: #448ccb;
+            --color-yellow: #dca326;
+            --color-green: #48a666;
+
+            --font-serif: 'Noto Serif TC', 'PMingLiU', 'Times New Roman', serif;
+            --font-sans: 'Noto Sans TC', 'Microsoft JhengHei', Arial, sans-serif;
+        }
+
+        body { font-family: var(--font-sans); display: flex; justify-content: center; align-items: center; background: var(--bg-color); color: var(--text-main); margin: 0; min-height: 100vh; overflow-x: hidden;}
+        
+        h1, h2, h3, .auth-title, .menu-title { font-family: var(--font-serif); color: var(--text-main); font-weight: 700; margin-top: 0;}
+
+        /* 登入註冊介面 */
+        .auth-container { display: flex; flex-direction: column; align-items: center; width: 100%; max-width: 450px; padding: 20px; box-sizing: border-box; animation: fadeIn 0.5s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+
+        .auth-title { font-size: 50px; margin: 0 0 10px 0; letter-spacing: 6px; }
+        .auth-subtitle { font-size: 16px; color: var(--text-sub); margin-bottom: 30px; letter-spacing: 3px; font-weight: 500;}
+
+        .auth-card { background: var(--card-bg); padding: 35px 30px; border-radius: 12px; border: 1px solid var(--card-border); box-shadow: 0 10px 40px rgba(74, 54, 35, 0.08); width: 100%; box-sizing: border-box; }
+        .auth-tabs { display: flex; margin-bottom: 25px; border-bottom: 1px solid var(--card-border); }
+        .auth-tab { flex: 1; padding: 12px; background: none; border: none; color: var(--text-sub); font-size: 16px; cursor: pointer; transition: 0.3s; font-family: var(--font-sans); font-weight: 500;}
+        .auth-tab:hover { color: var(--text-main); }
+        .auth-tab.active { color: var(--primary); border-bottom: 2px solid var(--primary); font-weight: 700; }
+
+        .auth-form { display: none; }
+        .auth-form.active { display: block; animation: fadeIn 0.3s ease-out; }
+
+        .forgot-pwd-link { display: block; text-align: right; color: var(--primary); font-size: 13px; text-decoration: none; margin-top: -10px; margin-bottom: 20px; cursor: pointer; transition: 0.2s; font-weight: 500;}
+        .forgot-pwd-link:hover { color: var(--text-main); text-decoration: underline; }
+
+        /* 遊戲主介面 */
+        .page-container { display: none; justify-content: center; align-items: center; width: 100%; height: 100vh; padding: 20px; box-sizing: border-box; }
+        
+        .center-section { display: flex; flex-direction: column; align-items: center; text-align: center; width: 100%; max-width: 420px; animation: fadeIn 0.5s ease-out; }
+        .menu-title { font-size: 60px; margin-bottom: 10px; letter-spacing: 8px; }
+        .menu-subtitle { font-size: 18px; color: var(--text-sub); margin-bottom: 40px; letter-spacing: 2px; font-weight: 500;}
+
+        .glass-card { background: var(--card-bg); padding: 40px 35px; border-radius: 16px; border: 1px solid var(--card-border); box-shadow: 0 15px 45px rgba(74, 54, 35, 0.08); width: 100%; box-sizing: border-box; }
+        .glass-card h3 { margin-bottom: 25px; font-size: 22px; text-align: center; letter-spacing: 1px;}
+
+        .player-select-group { display: flex; justify-content: center; gap: 15px; margin-bottom: 35px; }
+        .player-option { width: 60px; height: 60px; border-radius: 50%; border: 2px solid var(--btn-beige); display: flex; align-items: center; justify-content: center; font-size: 20px; cursor: pointer; transition: all 0.2s; color: var(--text-sub); background: white; font-family: var(--font-serif); font-weight: bold;}
+        .player-option:hover { background: var(--btn-beige); color: var(--text-main); transform: translateY(-2px);}
+        .player-option.active { background: var(--primary); border-color: var(--primary); color: white; box-shadow: 0 5px 15px rgba(140, 115, 90, 0.3); transform: scale(1.05); }
+
+        .btn-group { display: flex; flex-direction: column; gap: 15px; width: 100%;}
+        button { width: 100%; font-family: var(--font-sans); letter-spacing: 1px; cursor: pointer; border: none; }
+        
+        .start-btn { padding: 18px; font-size: 18px; font-weight: bold; color: white; background: var(--btn-brown-dark); border-radius: 10px; transition: all 0.2s; box-shadow: 0 4px 10px rgba(92, 69, 48, 0.2); }
+        .start-btn:hover { background: var(--text-main); transform: translateY(-2px); }
+        
+        .primary-btn { padding: 16px; font-size: 17px; font-weight: bold; color: white; background: var(--primary); border-radius: 8px; transition: all 0.2s; box-shadow: 0 4px 10px rgba(140, 115, 90, 0.2); }
+        .primary-btn:hover { background: var(--text-main); transform: translateY(-2px); }
+        
+        .online-btn { padding: 18px; font-size: 18px; font-weight: bold; color: white; background: var(--btn-brown-light); border-radius: 10px; transition: all 0.2s; box-shadow: 0 4px 10px rgba(156, 128, 101, 0.2); }
+        .online-btn:hover { background: var(--text-main); transform: translateY(-2px); }
+
+        /* 右上角：展開側邊欄的按鈕 */
+        .menu-toggle-btn {
+            position: fixed;
+            top: 30px;
+            right: 40px;
+            background-color: white;
+            color: var(--text-main);
+            border: 1px solid var(--card-border);
+            border-radius: 50px;
+            padding: 12px 25px;
+            font-size: 16px;
+            font-weight: bold;
+            box-shadow: 0 5px 20px rgba(74, 54, 35, 0.08);
+            z-index: 900;
+            display: none; 
+            width: auto;
+            transition: 0.2s;
+        }
+        .menu-toggle-btn:hover { background-color: var(--btn-beige); transform: translateY(-2px); }
+
+        /* 側邊滑出選單 (抽屜式) */
+        .right-sidebar {
+            position: fixed;
+            top: 0;
+            right: -450px; 
+            width: 380px;
+            height: 100vh;
+            background: var(--bg-color);
+            box-shadow: -10px 0 40px rgba(74, 54, 35, 0.15);
+            z-index: 1000;
+            transition: right 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            padding: 30px 25px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        .right-sidebar.open { right: 0; }
+
+        .close-sidebar-btn {
+            align-self: flex-end;
+            background: transparent;
+            font-size: 24px;
+            color: var(--text-sub);
+            padding: 0;
+            margin-bottom: 5px;
+            width: auto;
+        }
+        .close-sidebar-btn:hover { color: var(--danger); transform: scale(1.1); }
+
+        .nav-tabs { display: flex; background: var(--card-bg); border-radius: 12px; padding: 6px; border: 1px solid var(--card-border); box-shadow: 0 5px 20px rgba(74, 54, 35, 0.05); }
+        .nav-btn { flex: 1; padding: 12px 5px; font-size: 14px; font-weight: bold; color: var(--text-sub); background: transparent; border-radius: 8px; transition: 0.2s;}
+        .nav-btn:hover { color: var(--text-main); }
+        .nav-btn.active { background: var(--btn-beige); color: var(--text-main); }
+
+        .tab-content-panel { background: var(--card-bg); border-radius: 12px; padding: 25px; border: 1px solid var(--card-border); box-shadow: 0 10px 30px rgba(74, 54, 35, 0.08); flex: 1; display: flex; flex-direction: column; min-height: 0; }
+        .tab-pane { display: none; flex-direction: column; height: 100%; overflow-y: auto;}
+        .tab-pane.active { display: flex; }
+
+        .history-list { flex: 1; overflow-y: auto; padding-right: 5px; margin-bottom: 15px; display: flex; flex-direction: column; gap: 10px; }
+        .history-list::-webkit-scrollbar { width: 6px; }
+        .history-list::-webkit-scrollbar-thumb { background: #d0c5b5; border-radius: 3px; }
+        .history-item { background: #fdfdfc; border: 1px solid var(--card-border); border-radius: 8px; padding: 15px; text-align: left; }
+        .history-date { font-size: 12px; color: var(--text-sub); margin-bottom: 5px; }
+        .history-winner { font-size: 15px; font-weight: bold; color: var(--text-main); margin-bottom: 5px; font-family: var(--font-serif);}
+        .history-details { font-size: 13px; color: var(--text-sub); }
+        .history-empty { text-align: center; color: var(--text-sub); padding: 30px 0; font-size: 14px;}
+
+        .clear-btn { padding: 12px; font-size: 14px; font-weight: bold; color: var(--danger); background: transparent; border: 1px solid var(--danger); border-radius: 8px; transition: 0.2s;}
+        .clear-btn:hover { background: var(--danger); color: white; }
+
+        .account-header { display: flex; flex-direction: column; align-items: center; margin-bottom: 20px; border-bottom: 1px solid var(--card-border); padding-bottom: 20px; }
+        .avatar-circle { width: 70px; height: 70px; background: var(--bg-color); border: 2px solid var(--primary); color: var(--text-main); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 32px; margin-bottom: 15px; font-weight: bold; font-family: var(--font-serif); }
+        .account-name { font-size: 22px; font-weight: bold; margin: 0 0 5px 0; color: var(--text-main); font-family: var(--font-serif);}
+        .account-id { font-size: 13px; color: var(--text-sub); margin-bottom: 5px; font-family: monospace; }
+        .account-status { font-size: 14px; font-weight: bold; color: var(--primary); }
+
+        .account-menu { display: flex; flex-direction: column; gap: 10px; }
+        .menu-action-btn { background: #fdfdfc; border: 1px solid var(--card-border); color: var(--text-main); padding: 14px 16px; border-radius: 8px; display: flex; align-items: center; font-size: 15px; transition: all 0.2s; text-align: left; font-weight: 500;}
+        .menu-action-btn:hover { background: var(--btn-beige); transform: translateX(5px); border-color: var(--primary); }
+        .menu-icon { margin-right: 12px; font-size: 18px; }
+
+        .info-row { display: flex; justify-content: space-between; margin-bottom: 15px; border-bottom: 1px dashed var(--card-border); padding-bottom: 10px; font-size: 14px;}
+        .info-label { color: var(--text-sub); }
+        .info-value { font-weight: bold; color: var(--text-main); }
+
+        .rules-btn { padding: 16px; font-size: 16px; font-weight: bold; color: white; background: var(--primary); border-radius: 10px; transition: all 0.2s; box-shadow: 0 4px 10px rgba(140, 115, 90, 0.2); flex-shrink: 0; margin-top: auto;}
+        .rules-btn:hover { background: var(--text-main); transform: translateY(-2px); }
+
+        /* 彈窗樣式 */
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(74, 54, 35, 0.7); display: none; align-items: center; justify-content: center; z-index: 2000; backdrop-filter: blur(5px); }
+        .modal-content { background: var(--card-bg); color: var(--text-main); padding: 35px 45px; border-radius: 12px; width: 85%; max-width: 500px; max-height: 90vh; overflow-y: auto; box-sizing: border-box; text-align: left; box-shadow: 0 20px 50px rgba(74, 54, 35, 0.3); border: 1px solid var(--card-border); transform: translateY(-20px); animation: slideDown 0.3s forwards; }
+        .modal-content::-webkit-scrollbar { width: 6px; }
+        .modal-content::-webkit-scrollbar-thumb { background: #d0c5b5; border-radius: 3px; }
+        
+        @keyframes slideDown { to { transform: translateY(0); } }
+        .modal-content h2 { text-align: center; border-bottom: 1px solid var(--card-border); padding-bottom: 15px; margin-bottom: 25px; font-size: 26px;}
+        
+        .btn-cancel-modal { padding: 16px; font-size: 17px; font-weight: bold; color: var(--text-main); background: var(--btn-beige); border-radius: 8px; transition: 0.2s; }
+        .btn-cancel-modal:hover { background: #dcd3c6; }
+
+        .input-group { margin-bottom: 20px; text-align: left;}
+        .input-group label { display: block; margin-bottom: 8px; font-size: 14px; font-weight: 500;}
+        .input-group input { width: 100%; padding: 14px; border-radius: 8px; border: 1px solid var(--card-border); background: #fdfdfc; color: var(--text-main); font-size: 16px; box-sizing: border-box; outline: none; transition: 0.2s; font-family: var(--font-sans);}
+        .input-group input:focus { border-color: var(--primary); background: #ffffff; box-shadow: 0 0 0 3px rgba(140, 115, 90, 0.1); }
+
+        .friend-list-container { max-height: 350px; overflow-y: auto; margin-bottom: 20px; display: flex; flex-direction: column; gap: 10px; }
+        .friend-list-container::-webkit-scrollbar { width: 6px; }
+        .friend-list-container::-webkit-scrollbar-thumb { background: #d0c5b5; border-radius: 3px; }
+        .friend-item { display: flex; align-items: center; padding: 12px; background: #fdfdfc; border-radius: 8px; border: 1px solid var(--card-border);}
+        .friend-avatar { width: 45px; height: 45px; background: var(--bg-color); border: 1px solid var(--card-border); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 18px; margin-right: 15px; font-family: var(--font-serif); font-weight: bold;}
+        .friend-info { flex: 1; }
+        .friend-name { font-weight: bold; font-size: 16px; margin-bottom: 3px; }
+        .friend-id { font-size: 12px; color: var(--text-sub); font-family: monospace;}
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 5px; background-color: var(--primary); }
+        
+        .add-friend-bar { display: flex; gap: 10px; margin-bottom: 25px; }
+        .add-friend-bar input { flex: 1; padding: 12px; border-radius: 8px; border: 1px solid var(--card-border); background: #fdfdfc; outline: none; }
+        .add-friend-bar button { width: auto; padding: 10px 18px; background: var(--primary); color: white; border-radius: 8px; font-weight: bold; transition: 0.2s;}
+        .add-friend-bar button:hover { background: var(--text-main); }
+        
+        /* 房間 UI 專屬樣式 */
+        .btn-create-room { padding: 18px; font-size: 18px; font-weight: bold; color: white; background: var(--btn-brown-light); border-radius: 8px; transition: all 0.2s; box-shadow: 0 4px 10px rgba(156, 128, 101, 0.2); letter-spacing: 2px; }
+        .btn-create-room:hover { background: var(--text-main); transform: translateY(-2px); }
+
+        .room-input-group { display: flex; gap: 10px; margin-bottom: 30px; }
+        .room-input-group input { flex: 1; padding: 15px; border-radius: 8px; border: 1px solid var(--card-border); background: #fdfdfc; font-size: 22px; letter-spacing: 5px; text-align: center; outline: none; transition: 0.2s;}
+        .room-input-group input:focus { border-color: var(--btn-brown-dark); background: white; box-shadow: 0 0 0 3px rgba(92, 69, 48, 0.1); }
+        .room-input-group button { width: auto; padding: 10px 30px; background: var(--btn-brown-dark); color: white; border-radius: 8px; font-weight: bold; font-size: 18px; transition: 0.2s; letter-spacing: 1px;}
+        .room-input-group button:hover { background: var(--text-main); }
+
+        .room-code-display { font-size: 60px; font-weight: bold; text-align: center; letter-spacing: 15px; background: #fdfdfc; padding: 20px; border-radius: 12px; margin-bottom: 25px; border: 1px solid var(--card-border); font-family: var(--font-serif); margin-left: 15px;}
+        
+        .room-success-msg { color: #5f7556; font-family: var(--font-serif); font-size: 18px; font-weight: 700; margin: 15px 0; display: flex; align-items: center; justify-content: center; gap: 10px; }
+        .room-success-msg .check-icon { background-color: #79966d; color: white; border-radius: 4px; padding: 2px 6px; font-size: 14px; display: inline-flex; align-items: center; justify-content: center;}
+
+        .player-list-header { text-align: left; margin: 25px 0 10px 0; font-family: var(--font-serif); font-size: 18px; }
+
+        .room-player-item { display: flex; align-items: center; padding: 15px 20px; background: #fdfdfc; border-radius: 8px; border: 1px solid var(--card-border); margin-bottom: 12px; }
+        .room-player-avatar { width: 55px; height: 55px; border: 1px solid #d0c5b5; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; margin-right: 20px; font-family: var(--font-serif); }
+        .room-player-info { display: flex; flex-direction: column; text-align: left; }
+        .room-player-name { font-weight: bold; font-size: 18px; margin-bottom: 4px; }
+        .room-player-id { font-size: 13px; color: var(--text-sub); }
+
+        @media (max-width: 600px) {
+            .menu-toggle-btn { top: 15px; right: 15px; padding: 10px 18px; font-size: 14px; }
+            .right-sidebar { width: 100vw; right: -100vw; }
+            .menu-title { font-size: 45px; }
+        }
+
+        /* 覆盤專用棋盤 CSS - 修正了比例壓縮問題 */
+        .board { background-color: #e0d5c1; padding: 12px; border-radius: 16px; display: grid; grid-template-columns: repeat(6, 1fr 0.25fr) 1fr; grid-template-rows: repeat(6, 1fr 0.25fr) 1fr; box-shadow: inset 0 5px 15px rgba(0,0,0,0.05); box-sizing: border-box; }
+        .grid-item { display: flex; justify-content: center; align-items: center; }
+        .cell { background-color: #fdfdfc; border-radius: 8px; }
+        .wall-h, .wall-v { border-radius: 4px; }
+        .intersection { background-color: transparent; }
+        .piece { border-radius: 50%; width: 75%; height: 75%; box-shadow: 0 4px 10px rgba(74, 54, 35, 0.25); }
+        .piece-red { background-color: var(--color-red); }
+        .piece-blue { background-color: var(--color-blue); }
+        .piece-yellow { background-color: var(--color-yellow); }
+        .piece-green { background-color: var(--color-green); }
+        .wall-placed { cursor: default; }
+        .wall-red { background-color: var(--color-red) !important; box-shadow: 0 2px 4px rgba(209, 86, 69, 0.4); }
+        .wall-blue { background-color: var(--color-blue) !important; box-shadow: 0 2px 4px rgba(68, 140, 203, 0.4); }
+        .wall-yellow { background-color: var(--color-yellow) !important; box-shadow: 0 2px 4px rgba(220, 163, 38, 0.4); }
+        .wall-green { background-color: var(--color-green) !important; box-shadow: 0 2px 4px rgba(72, 166, 102, 0.4); }
+
+        /* 💡 新增：破牆動態標記的 CSS */
+        .wall-broken-highlight {
+            background-color: rgba(220, 53, 69, 0.8) !important;
+            box-shadow: 0 0 10px rgba(220, 53, 69, 0.8);
+            position: relative;
+        }
+        .wall-broken-highlight::after {
+            content: "✖";
+            color: white;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 16px;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="auth-page" class="auth-container">
+        <h1 class="auth-title">WALL GO</h1>
+        <p class="auth-subtitle">BOUTIQUE BOARD GAME</p>
+        
+        <div class="auth-card">
+            <div class="auth-tabs">
+                <button class="auth-tab active" onclick="switchAuthTab('login')">會員登入</button>
+                <button class="auth-tab" onclick="switchAuthTab('register')">註冊新會員</button>
+            </div>
+
+            <div id="form-login" class="auth-form active">
+                <div class="input-group">
+                    <label>玩家 ID</label>
+                    <input type="text" id="login-id" placeholder="例如: #1234">
+                </div>
+                <div class="input-group" style="margin-bottom: 10px;">
+                    <label>登入密碼</label>
+                    <input type="password" id="login-pwd" placeholder="請輸入密碼">
+                </div>
+                <a class="forgot-pwd-link" onclick="handleForgotPassword()">忘記密碼？(重設)</a>
+                <button class="start-btn" onclick="performLogin()">進入大廳</button>
+            </div>
+
+            <div id="form-register" class="auth-form">
+                <div class="input-group">
+                    <label>設定玩家暱稱</label>
+                    <input type="text" id="reg-name" placeholder="例如: 牆壁毀滅者">
+                </div>
+                <div class="input-group">
+                    <label>設定登入密碼</label>
+                    <input type="password" id="reg-pwd" placeholder="請設定一組好記的密碼">
+                </div>
+                <button class="primary-btn" onclick="performRegister()" style="background: var(--btn-brown-light);">註冊並自動登入</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="forgot-pwd-modal" class="modal-overlay">
+        <div class="modal-content" style="max-width: 400px; text-align: center;">
+            <h2>重設密碼</h2>
+            <p style="color: var(--text-sub); font-size: 14px; margin-bottom: 25px;">請輸入您的玩家 ID 以及欲修改的新密碼。</p>
+            <div class="input-group">
+                <label>玩家 ID</label>
+                <input type="text" id="forgot-pwd-id" placeholder="請輸入玩家 ID (例: #1234)">
+            </div>
+            <div class="input-group">
+                <label>設定新密碼</label>
+                <input type="password" id="forgot-pwd-new" placeholder="請輸入新密碼">
+            </div>
+            <button class="primary-btn" onclick="resetPassword()" style="background: var(--btn-brown-dark);">確認重設</button>
+            <button class="btn-cancel-modal" style="margin-top: 10px;" onclick="closeModal('forgot-pwd-modal')">取消</button>
+        </div>
+    </div>
+
+    <button id="main-menu-btn" class="menu-toggle-btn" onclick="toggleSidebar()">☰ 選單</button>
+
+    <div class="page-container" id="main-container">
+        <div class="center-section">
+            <h1 class="menu-title">WALL GO</h1>
+            <p class="menu-subtitle">快找朋友一起下棋吧</p>
+            
+            <div class="glass-card">
+                <h3>選擇遊玩人數</h3>
+                <div class="player-select-group">
+                    <div class="player-option" data-val="ai" onclick="setPlayers('ai')" style="font-size: 15px;">vs AI</div>
+                    <div class="player-option" data-val="2" onclick="setPlayers(2)">2</div>
+                    <div class="player-option active" data-val="3" onclick="setPlayers(3)">3</div>
+                    <div class="player-option" data-val="4" onclick="setPlayers(4)">4</div>
+                </div>
+                
+                <div class="btn-group">
+                    <button class="start-btn" onclick="startGame()">開始單機遊戲</button>
+                    <div style="margin: 15px 0; border-bottom: 1px solid var(--card-border);"></div>
+                    <button class="online-btn" onclick="openRoomModal()">建立 / 加入線上房間</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="right-sidebar" id="right-sidebar">
+        <button class="close-sidebar-btn" onclick="toggleSidebar()">✖</button>
+        
+        <div class="nav-tabs">
+            <button class="nav-btn active" onclick="switchTab('history')">歷史戰績</button>
+            <button class="nav-btn" onclick="switchTab('account')">我的帳號</button>
+            <button class="nav-btn" onclick="switchTab('info')">相關資訊</button>
+        </div>
+
+        <div class="tab-content-panel">
+            <div id="tab-history" class="tab-pane active">
+                <div style="text-align: right; margin-bottom: 15px; font-size: 13px; color: var(--text-sub);">
+                    總遊玩：<span id="total-games" style="color: var(--text-main); font-weight: bold;">0 場</span> |
+                    勝率：<span id="win-rate" style="color: var(--color-red); font-weight: bold;">0%</span>
+                </div>
+                <div id="history-list" class="history-list"></div>
+                <button class="clear-btn" onclick="clearHistory()">清除所有紀錄</button>
+            </div>
+
+            <div id="tab-account" class="tab-pane">
+                <div class="account-header">
+                    <div class="avatar-circle" id="display-avatar">👤</div>
+                    <h2 class="account-name" id="display-name">載入中...</h2>
+                    <div class="account-id" id="display-id">ID: 載入中...</div>
+                    <div class="account-status">線上 (Online) • 勝率: <span id="account-win-rate">0%</span></div>
+                </div>
+                <div class="account-menu">
+                    <button class="menu-action-btn" onclick="openProfileEditor()">
+                        <span class="menu-icon">✏️</span>編輯個人資料
+                    </button>
+                    <button class="menu-action-btn" onclick="openFriendList()">
+                        <span class="menu-icon">👥</span>好友名單
+                    </button>
+                    <button class="menu-action-btn" onclick="logout()" style="color: var(--danger); margin-top: 10px;">
+                        <span class="menu-icon">🚪</span>登出帳號
+                    </button>
+                </div>
+            </div>
+
+            <div id="tab-info" class="tab-pane">
+                <h3 style="text-align: center; margin-top: 0; font-family: var(--font-serif); font-size: 20px;">系統資訊</h3>
+                <div style="margin-bottom: 25px; border-bottom: 1px solid var(--card-border);"></div>
+                <div class="info-row"><span class="info-label">遊戲名稱</span><span class="info-value">Wall Go(源自魔鬼的計謀)</span></div>
+                <div class="info-row"><span class="info-label">目前版本</span><span class="info-value">v11(增加了覆盤功能)</span></div>
+                <p style="font-size: 13px; color: var(--primary); text-align: center; margin-top: 30px; font-weight: 500;">
+                    已成功連接至雲端資料庫
+                </p>
+            </div>
+        </div>
+
+        <button class="rules-btn" onclick="openModal('rules-modal')">📄 查看遊戲規則</button>
+    </div>
+
+    <div id="replay-modal" class="modal-overlay">
+        <div class="modal-content" style="max-width: 500px; text-align: center; padding: 25px 35px;">
+            <h2 style="margin-top: 0;">棋盤覆盤</h2>
+            
+            <div id="replay-board" class="board" style="width: 100%; max-width: min(100%, 50vh); aspect-ratio: 1/1; height: auto; margin: 0 auto 20px auto;"></div>
+            
+            <div style="display: flex; gap: 10px; justify-content: center; margin-bottom: 20px; align-items: center;">
+                <button class="btn-cancel-modal" onclick="changeReplayStep(-1)" id="btn-prev-step" style="flex: 1; padding: 12px; margin: 0;">上一步</button>
+                <span id="replay-step-display" style="font-weight: bold; min-width: 80px; font-size: 16px;">0 / 0</span>
+                <button class="start-btn" onclick="changeReplayStep(1)" id="btn-next-step" style="flex: 1; padding: 12px; background: var(--primary);">下一步</button>
+            </div>
+            
+            <button class="btn-cancel-modal" onclick="closeReplay()" style="background: var(--danger); color: white; width: 100%;">關閉覆盤</button>
+        </div>
+    </div>
+
+    <div id="room-modal" class="modal-overlay">
+        <div class="modal-content" style="max-width: 500px; text-align: center;">
+            <div id="room-ui-main">
+                <h2>線上對戰大廳</h2>
+                <button class="btn-create-room" style="margin-bottom: 35px;" onclick="createRoom()">建立新房間</button>
+                <div style="color: var(--text-sub); margin-bottom: 15px; font-size: 15px;">或是輸入代碼加入好友的房間</div>
+                <div class="room-input-group">
+                    <input type="text" id="join-room-input" placeholder="代碼" maxlength="4">
+                    <button onclick="joinRoom()">加入</button>
+                </div>
+                <button class="btn-cancel-modal" style="margin-top: 15px;" onclick="closeModal('room-modal')">取消</button>
+            </div>
+
+            <div id="room-ui-waiting" style="display: none;">
+                <h2>房間等候室</h2>
+                <div class="room-success-msg">
+                    <span class="check-icon">✓</span> 已成功加入！等待其他玩家...
+                </div>
+                <p style="color: var(--text-sub); margin-bottom: 15px; font-size: 15px;">請將此代碼分享給對手：</p>
+                <div class="room-code-display" id="display-room-code">0 0 0 0</div>
+                <h4 class="player-list-header">房內玩家 (<span id="room-player-count">1</span>/4)</h4>
+                <div class="friend-list-container" id="room-players-list" style="max-height: 250px; text-align: left;">
+                </div>
+                <div class="btn-group" style="margin-top: 30px;">
+                    <button class="btn-create-room" id="btn-start-online" disabled onclick="startOnlineGame()" style="background: var(--btn-brown-dark); padding: 18px; font-size: 18px;">開始線上對戰</button>
+                    <button class="btn-cancel-modal" onclick="leaveRoom()" style="padding: 18px; font-size: 18px;">離開房間</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="friends-modal" class="modal-overlay">
+        <div class="modal-content" style="max-width: 480px;">
+            <h2>我的好友</h2>
+            <div class="add-friend-bar">
+                <input type="text" id="add-friend-input" placeholder="輸入 ID (例: #1234)">
+                <button onclick="sendFriendRequest()" style="background: var(--btn-brown-light);">發送</button>
+            </div>
+            <div class="friend-list-container" id="friend-list-render">
+                <p style="text-align:center; color:var(--text-sub); margin-top:20px;">載入中...</p>
+            </div>
+            <button class="btn-cancel-modal" onclick="closeModal('friends-modal')" style="margin-top: 10px;">關閉</button>
+        </div>
+    </div>
+
+    <div id="profile-modal" class="modal-overlay">
+        <div class="modal-content" style="max-width: 400px;">
+            <h2>編輯個人資料</h2>
+            <div class="input-group">
+                <label>玩家頭像 (單一字母或 Emoji)</label>
+                <input type="text" id="input-avatar" maxlength="2">
+            </div>
+            <div class="input-group">
+                <label>玩家暱稱</label>
+                <input type="text" id="input-name">
+            </div>
+            <button class="start-btn" onclick="saveProfile()" style="background: var(--btn-brown-light);">儲存修改</button>
+            <button class="btn-cancel-modal" style="margin-top: 10px;" onclick="closeModal('profile-modal')">取消</button>
+        </div>
+    </div>
+
+    <div id="rules-modal" class="modal-overlay">
+        <div class="modal-content">
+            <h2>遊戲規則</h2>
+            <div class="rules-text" style="color: var(--text-main); font-size: 15px; line-height: 1.8; margin-bottom: 25px;">
+                • <b>放置期</b>：依序放完 2 顆棋子。<br>
+                • <b>行動期</b>：每回可移動 1~2 步（含 L型轉彎，不可越子）。<br>
+                • <b>建牆</b>：移動後必須在該棋子四周蓋牆。<br>
+                • <b>破牆</b>：每人一次，可打破任何一道牆。<br>
+                • <b>限時</b>：每回合 90 秒，超時將剝奪移動權並自動執行。<br>
+                • <b>獲勝</b>：佔領最多「純淨獨占領地」者勝。
+            </div>
+            <button class="btn-cancel-modal" onclick="closeModal('rules-modal')">我準備好了</button>
+        </div>
+    </div>
+
+    <script>
+        let currentUser = null;
+        let selectedPlayers = 3;
+
+        const API_URL = 'https://wallgo-play.onrender.com';
+        const socket = io(API_URL);
+        let currentRoomCode = null;
+
+        let globalHistoryData = [];
+
+        function toggleSidebar() {
+            const sidebar = document.getElementById('right-sidebar');
+            sidebar.classList.toggle('open');
+        }
+
+        function openRoomModal() {
+            openModal('room-modal');
+            document.getElementById('room-ui-main').style.display = 'block';
+            document.getElementById('room-ui-waiting').style.display = 'none';
+        }
+
+        function createRoom() {
+            const roomCode = Math.floor(1000 + Math.random() * 9000).toString();
+            const userInfo = { id: currentUser.id, name: currentUser.name, avatar: currentUser.avatar };
+            currentRoomCode = roomCode;
+            socket.emit('create_room', { room_code: roomCode, user_info: userInfo });
+        }
+
+        function joinRoom() {
+            const roomCode = document.getElementById('join-room-input').value.trim();
+            if (roomCode.length !== 4) return alert("請輸入 4 位數字的房間代碼！");
+            const userInfo = { id: currentUser.id, name: currentUser.name, avatar: currentUser.avatar };
+            currentRoomCode = roomCode;
+            socket.emit('join_room', { room_code: roomCode, user_info: userInfo });
+        }
+
+        function leaveRoom() {
+            if (currentRoomCode) {
+                socket.emit('leave_room', { room_code: currentRoomCode, user_id: currentUser.id });
+                currentRoomCode = null;
+            }
+            openRoomModal();
+        }
+
+        socket.on('room_created', (data) => {
+            currentRoomCode = data.room_code;
+            renderWaitingRoom(data.room_code, data.players);
+        });
+
+        socket.on('room_updated', (data) => {
+            if (currentRoomCode === data.room_code) {
+                renderWaitingRoom(data.room_code, data.players);
+            }
+        });
+
+        socket.on('join_error', (data) => {
+            alert(data.message);
+            currentRoomCode = null; 
+        });
+
+        function renderWaitingRoom(code, players) {
+            document.getElementById('room-ui-main').style.display = 'none';
+            document.getElementById('room-ui-waiting').style.display = 'block';
+            
+            document.getElementById('display-room-code').innerText = code.split('').join(' '); 
+            document.getElementById('room-player-count').innerText = players.length;
+
+            const list = document.getElementById('room-players-list');
+            list.innerHTML = '';
+            
+            players.forEach(p => {
+                list.innerHTML += `
+                    <div class="room-player-item">
+                        <div class="room-player-avatar">${p.avatar}</div>
+                        <div class="room-player-info">
+                            <div class="room-player-name">${p.name} ${p.id === currentUser.id ? '(你)' : ''}</div>
+                            <div class="room-player-id">${p.id}</div>
+                        </div>
+                    </div>`;
+            });
+
+            document.getElementById('btn-start-online').disabled = (players.length < 2);
+        }
+
+        function startOnlineGame() {
+            if (currentRoomCode) {
+                socket.emit('start_game', { room_code: currentRoomCode });
+            }
+        }
+
+        socket.on('game_started', (data) => {
+            window.location.href = `game.html?mode=online&room=${data.room_code}&players=${data.player_count}`;
+        });
+
+        async function performLogin() {
+            const id = document.getElementById('login-id').value.trim();
+            const pwd = document.getElementById('login-pwd').value.trim();
+            
+            if (!id || !pwd) return alert("ID 與密碼都不能為空！");
+            if (!id.startsWith("#")) return alert("ID 格式錯誤，必須包含 # 號 (例如 #1234)");
+
+            try {
+                const response = await fetch(`${API_URL}/api/login`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: id, password: pwd })
+                });
+                const result = await response.json();
+                if (result.success) {
+                    currentUser = { ...result.user };
+                    localStorage.setItem('wallGoSession', JSON.stringify(currentUser));
+                    document.getElementById('login-pwd').value = "";
+                    checkLogin();
+                } else alert(result.message);
+            } catch (error) { alert("無法連線到伺服器，請確認後端已成功啟動！"); }
+        }
+
+        async function performRegister() {
+            const name = document.getElementById('reg-name').value.trim();
+            const pwd = document.getElementById('reg-pwd').value.trim();
+            
+            if (!name || !pwd) return alert("暱稱與密碼都不能為空！");
+            let randomId = "#" + Math.floor(1000 + Math.random() * 9000);
+
+            try {
+                const response = await fetch(`${API_URL}/api/register`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: randomId, username: name, password: pwd })
+                });
+                const result = await response.json();
+                if (result.success) {
+                    alert(`註冊成功！寫入資料庫完畢。\n\n你的專屬玩家 ID 是：${result.user.id}\n請務必牢記你的 ID 與密碼。`);
+                    currentUser = { ...result.user }; 
+                    localStorage.setItem('wallGoSession', JSON.stringify(currentUser));
+                    document.getElementById('reg-name').value = "";
+                    document.getElementById('reg-pwd').value = "";
+                    checkLogin();
+                } else alert(result.message);
+            } catch (error) { alert("無法連線到伺服器，請確認後端已成功啟動！"); }
+        }
+
+        async function resetPassword() {
+            const loginId = document.getElementById('forgot-pwd-id').value.trim();
+            const newPwd = document.getElementById('forgot-pwd-new').value.trim();
+
+            if (!loginId || !newPwd) return alert("玩家 ID 與新密碼都不能為空！");
+
+            try {
+                const response = await fetch(`${API_URL}/api/reset_password`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: loginId, new_password: newPwd })
+                });
+                const result = await response.json();
+                if (result.success) {
+                    alert(result.message);
+                    closeModal('forgot-pwd-modal');
+                    document.getElementById('login-pwd').value = "";
+                } else alert(result.message);
+            } catch (error) { alert("無法連線到伺服器，請確認後端已成功啟動！"); }
+        }
+
+        async function loadHistory() {
+            const listEl = document.getElementById('history-list');
+            const totalGamesEl = document.getElementById('total-games');
+            const winRateEl = document.getElementById('win-rate');
+            const accountWinRateEl = document.getElementById('account-win-rate');
+            if (!currentUser) return;
+
+            try {
+                const response = await fetch(`${API_URL}/api/get_history`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: currentUser.id })
+                });
+                const result = await response.json();
+                if (result.success) {
+                    const history = result.history;
+                    globalHistoryData = history; 
+                    let wins = 0;
+
+                    let localReplays = {};
+                    try {
+                        localReplays = JSON.parse(localStorage.getItem('wallGoReplays') || '{}');
+                    } catch(e) {}
+
+                    if (history.length === 0) {
+                        if (totalGamesEl) totalGamesEl.innerText = `0 場`;
+                        if (winRateEl) winRateEl.innerText = `0%`;
+                        if (accountWinRateEl) accountWinRateEl.innerText = `0%`;
+                        listEl.innerHTML = '<div class="history-empty">尚無比賽紀錄<br>趕快開始第一場對戰吧！</div>';
+                        return;
+                    }
+                    
+                    listEl.innerHTML = '';
+                    history.slice().reverse().forEach((record, revIdx) => {
+                        let originalIndex = history.length - 1 - revIdx;
+                        if (record.winner.includes('(你)')) wins++;
+
+                        let recordKey = record.winScore + "_" + (record.details || "").replace(/\s+/g, '');
+
+                        if (!record.replayData && localReplays[recordKey]) {
+                            record.replayData = localReplays[recordKey];
+                            globalHistoryData[originalIndex].replayData = localReplays[recordKey];
+                        }
+
+                        let hasReplay = !!record.replayData;
+                        let replayBtnHtml = hasReplay 
+                            ? `<button class="primary-btn" style="width: auto; padding: 6px 12px; font-size: 13px;" onclick="openReplay(${originalIndex})">查看覆盤</button>` 
+                            : `<span style="font-size: 12px; color: var(--text-sub);">無覆盤</span>`;
+
+                        listEl.innerHTML += `
+                            <div class="history-item">
+                                <div style="display: flex; justify-content: space-between; align-items: center;">
+                                    <div>
+                                        <div class="history-date">${record.date}</div>
+                                        <div class="history-winner">${record.winner} <span style="font-size:12px; color:var(--text-sub);">(${record.winScore}格)</span></div>
+                                        <div class="history-details">${record.details}</div>
+                                    </div>
+                                    <div>
+                                        ${replayBtnHtml}
+                                    </div>
+                                </div>
+                            </div>`;
+                    });
+
+                    let winRate = Math.round((wins / history.length) * 100);
+                    if (totalGamesEl) totalGamesEl.innerText = `${history.length} 場`;
+                    if (winRateEl) winRateEl.innerText = `${winRate}%`;
+                    if (accountWinRateEl) accountWinRateEl.innerText = `${winRate}%`;
+                }
+            } catch (error) { listEl.innerHTML = '<div class="history-empty" style="color:var(--danger);">戰績載入失敗，請檢查連線。</div>'; }
+        }
+
+        async function clearHistory() {
+            if (confirm("確定要清除所有的歷史戰績嗎？雲端資料刪除後無法復原！")) {
+                try {
+                    await fetch(`${API_URL}/api/clear_history`, {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: currentUser.id })
+                    });
+                    
+                    localStorage.removeItem('wallGoReplays');
+                    loadHistory(); 
+                } catch (error) { alert("清除失敗，請檢查連線！"); }
+            }
+        }
+
+        // ==========================================
+        // 💡 覆盤播放器邏輯 (加入動態破牆比對)
+        // ==========================================
+        let currentReplayData = [];
+        let currentStepIndex = 0;
+        const replayBoardSize = 13;
+
+        function openReplay(historyIndex) {
+            let record = globalHistoryData[historyIndex];
+            if (!record || !record.replayData) {
+                return alert("這局遊戲沒有紀錄到覆盤資料！");
+            }
+            
+            currentReplayData = JSON.parse(record.replayData);
+            currentStepIndex = currentReplayData.length - 1; 
+            
+            openModal('replay-modal');
+            initReplayBoard();
+            renderReplayStep();
+        }
+
+        function closeReplay() {
+            closeModal('replay-modal');
+            currentReplayData = [];
+        }
+
+        function initReplayBoard() {
+            const boardEl = document.getElementById('replay-board');
+            boardEl.innerHTML = '';
+            for (let r = 0; r < replayBoardSize; r++) {
+                for (let c = 0; c < replayBoardSize; c++) {
+                    const div = document.createElement('div');
+                    div.classList.add('grid-item'); 
+                    div.dataset.r = r; div.dataset.c = c;
+                    
+                    if (r % 2 === 0 && c % 2 === 0) div.classList.add('cell');
+                    else if (r % 2 !== 0 && c % 2 === 0) div.classList.add('wall-h');
+                    else if (r % 2 === 0 && c % 2 !== 0) div.classList.add('wall-v');
+                    else div.classList.add('intersection');
+                    
+                    boardEl.appendChild(div);
+                }
+            }
+        }
+
+        function changeReplayStep(delta) {
+            let newIndex = currentStepIndex + delta;
+            if (newIndex >= 0 && newIndex < currentReplayData.length) {
+                currentStepIndex = newIndex;
+                renderReplayStep();
+            }
+        }
+
+        function renderReplayStep() {
+            const boardEl = document.getElementById('replay-board');
+            const stepData = currentReplayData[currentStepIndex];
+            
+            // 1. 清空盤面標記
+            boardEl.querySelectorAll('.grid-item').forEach(el => {
+                el.innerHTML = '';
+                el.classList.remove('wall-placed', 'wall-red', 'wall-blue', 'wall-yellow', 'wall-green', 'wall-broken-highlight');
+            });
+
+            // 2. 渲染現有牆壁
+            stepData.walls.forEach(wall => {
+                const [wKey, color] = wall; 
+                const [wr, wc] = wKey.split(',').map(Number);
+                const wEl = boardEl.querySelector(`[data-r="${wr}"][data-c="${wc}"]`);
+                if (wEl) wEl.classList.add('wall-placed', `wall-${color}`);
+            });
+
+            // 💡 3. 動態比對破牆：如果「上一步」有這道牆，但「這一步」不見了，就標記它為破牆 (打個叉)
+            if (currentStepIndex > 0) {
+                const prevWalls = new Map(currentReplayData[currentStepIndex - 1].walls);
+                const currWalls = new Map(stepData.walls);
+                prevWalls.forEach((color, key) => {
+                    if (!currWalls.has(key)) {
+                        const [wr, wc] = key.split(',').map(Number);
+                        const wEl = boardEl.querySelector(`[data-r="${wr}"][data-c="${wc}"]`);
+                        if (wEl) wEl.classList.add('wall-broken-highlight');
+                    }
+                });
+            }
+
+            // 4. 渲染棋子
+            stepData.pieces.forEach(p => {
+                const cell = boardEl.querySelector(`[data-r="${p.r}"][data-c="${p.c}"]`);
+                if (cell) {
+                    const pieceDiv = document.createElement('div');
+                    pieceDiv.classList.add('piece', `piece-${p.color}`);
+                    cell.appendChild(pieceDiv);
+                }
+            });
+
+            // 更新按鈕狀態
+            document.getElementById('replay-step-display').innerText = `${currentStepIndex} / ${currentReplayData.length - 1}`;
+            document.getElementById('btn-prev-step').disabled = (currentStepIndex === 0);
+            document.getElementById('btn-next-step').disabled = (currentStepIndex === currentReplayData.length - 1);
+            document.getElementById('btn-prev-step').style.opacity = (currentStepIndex === 0) ? '0.5' : '1';
+            document.getElementById('btn-next-step').style.opacity = (currentStepIndex === currentReplayData.length - 1) ? '0.5' : '1';
+        }
+        // ==========================================
+
+        async function openFriendList() { 
+            openModal('friends-modal');
+            document.getElementById('friend-list-render').innerHTML = "<p style='text-align:center; color:var(--text-sub); margin-top:20px;'>載入中...</p>";
+            await fetchFriends();
+        }
+
+        async function fetchFriends() {
+            if (!currentUser) return;
+            try {
+                const res = await fetch(`${API_URL}/api/get_friends`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: currentUser.id })
+                });
+                const result = await res.json();
+                if (result.success) renderFriendsUI(result.friends, result.pending_sent, result.pending_received);
+            } catch(e) { document.getElementById('friend-list-render').innerHTML = "<p style='color:var(--danger); text-align:center;'>載入失敗，請檢查連線。</p>"; }
+        }
+
+        function renderFriendsUI(friends, pendingSent, pendingReceived) {
+            let html = '';
+            
+            if (pendingReceived.length > 0) {
+                html += `<h4 style="color:var(--text-main); margin: 5px 0; font-family:var(--font-serif);">待您審核的邀請</h4>`;
+                pendingReceived.forEach(f => {
+                    html += `
+                    <div class="friend-item" style="border-color: var(--primary);">
+                        <div class="friend-avatar">${f.avatar}</div>
+                        <div class="friend-info">
+                            <div class="friend-name">${f.name}</div>
+                            <div class="friend-id">${f.id}</div>
+                        </div>
+                        <button style="background:var(--success); color:white; padding:6px 12px; border:none; border-radius:6px; margin-right:5px; cursor:pointer;" onclick="handleFriendReq('${f.id}', 'accept')">同意</button>
+                        <button style="background:var(--danger); color:white; padding:6px 12px; border:none; border-radius:6px; cursor:pointer;" onclick="handleFriendReq('${f.id}', 'reject')">拒絕</button>
+                    </div>`;
+                });
+                html += `<hr style="border-color:var(--card-border); margin:15px 0;">`;
+            }
+
+            if (pendingSent.length > 0) {
+                html += `<h4 style="color:var(--text-main); margin: 5px 0; font-family:var(--font-serif);">等待對方同意</h4>`;
+                pendingSent.forEach(f => {
+                    html += `
+                    <div class="friend-item" style="opacity:0.6;">
+                        <div class="friend-avatar">${f.avatar}</div>
+                        <div class="friend-info">
+                            <div class="friend-name">${f.name}</div>
+                            <div class="friend-id">${f.id}</div>
+                        </div>
+                        <span style="font-size:13px; color:var(--text-sub);">等待中...</span>
+                    </div>`;
+                });
+                html += `<hr style="border-color:var(--card-border); margin:15px 0;">`;
+            }
+
+            html += `<h4 style="color:var(--text-main); margin: 5px 0; font-family:var(--font-serif);">我的正式好友</h4>`;
+            if (friends.length === 0) {
+                html += "<p style='text-align:center; color:var(--text-sub); font-size:14px; padding: 20px 0;'>目前還沒有好友喔！趕快輸入上方 ID 加朋友吧！</p>";
+            } else {
+                friends.forEach(f => {
+                    html += `
+                    <div class="friend-item">
+                        <div class="friend-avatar">${f.avatar}</div>
+                        <div class="friend-info">
+                            <div class="friend-name">${f.name} <span class="status-dot online"></span></div>
+                            <div class="friend-id">${f.id}</div>
+                        </div>
+                    </div>`;
+                });
+            }
+            document.getElementById('friend-list-render').innerHTML = html;
+        }
+
+        async function sendFriendRequest() {
+            const targetId = document.getElementById('add-friend-input').value.trim();
+            if (!targetId.startsWith("#")) return alert("ID 格式錯誤 (需包含 #，例如 #1234)");
+            
+            try {
+                const res = await fetch(`${API_URL}/api/send_friend_request`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ requester_id: currentUser.id, receiver_id: targetId })
+                });
+                const result = await res.json();
+                alert(result.message);
+                if (result.success) {
+                    document.getElementById('add-friend-input').value = '';
+                    fetchFriends(); 
+                }
+            } catch(e) { alert("連線失敗，請稍後再試！"); }
+        }
+
+        async function handleFriendReq(requesterId, action) {
+            try {
+                const res = await fetch(`${API_URL}/api/handle_friend_request`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ requester_id: requesterId, receiver_id: currentUser.id, action: action })
+                });
+                const result = await res.json();
+                if (result.success) fetchFriends(); 
+                else alert(result.message);
+            } catch(e) { alert("連線失敗！"); }
+        }
+
+        function switchAuthTab(type) {
+            document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.auth-form').forEach(f => f.classList.remove('active'));
+            if (type === 'login') {
+                document.querySelectorAll('.auth-tab')[0].classList.add('active');
+                document.getElementById('form-login').classList.add('active');
+            } else {
+                document.querySelectorAll('.auth-tab')[1].classList.add('active');
+                document.getElementById('form-register').classList.add('active');
+            }
+        }
+
+        function handleForgotPassword() {
+            const loginId = document.getElementById('login-id').value.trim();
+            if (loginId) document.getElementById('forgot-pwd-id').value = loginId;
+            document.getElementById('forgot-pwd-new').value = ""; 
+            openModal('forgot-pwd-modal');
+        }
+
+        function checkLogin() {
+            const savedSession = localStorage.getItem('wallGoSession');
+            if (savedSession) {
+                currentUser = JSON.parse(savedSession);
+                document.getElementById('auth-page').style.display = 'none';
+                document.getElementById('main-container').style.display = 'flex';
+                document.getElementById('main-menu-btn').style.display = 'block'; 
+                updateProfileUI();
+            } else {
+                document.getElementById('auth-page').style.display = 'flex';
+                document.getElementById('main-container').style.display = 'none';
+                document.getElementById('main-menu-btn').style.display = 'none'; 
+            }
+        }
+
+        function logout() {
+            if (confirm("確定要登出帳號嗎？")) {
+                localStorage.removeItem('wallGoSession');
+                location.reload();
+            }
+        }
+
+        function updateProfileUI() {
+            document.getElementById('display-name').innerText = currentUser.name;
+            document.getElementById('display-id').innerText = `ID: ${currentUser.id}`;
+            document.getElementById('display-avatar').innerText = currentUser.avatar;
+        }
+
+        function saveProfile() {
+            const newName = document.getElementById('input-name').value.trim();
+            const newAvatar = document.getElementById('input-avatar').value.trim();
+            if (!newName) return alert("暱稱不能為空！");
+
+            currentUser.name = newName;
+            currentUser.avatar = newAvatar || newName.charAt(0).toUpperCase();
+            
+            localStorage.setItem('wallGoSession', JSON.stringify(currentUser));
+            updateProfileUI();
+            closeModal('profile-modal');
+        }
+
+        function openModal(id) { document.getElementById(id).style.display = 'flex'; }
+        function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+        
+        window.onclick = function(event) {
+            if (event.target.classList.contains('modal-overlay')) event.target.style.display = 'none';
+        }
+
+        function openProfileEditor() {
+            document.getElementById('input-name').value = currentUser.name;
+            document.getElementById('input-avatar').value = currentUser.avatar;
+            openModal('profile-modal');
+        }
+
+        function switchTab(tabId) {
+            document.querySelectorAll('.nav-btn').forEach(btn => {
+                btn.classList.remove('active');
+                if (btn.innerText.includes(tabId === 'history' ? '歷史' : tabId === 'account' ? '帳號' : '資訊')) btn.classList.add('active');
+            });
+            document.querySelectorAll('.tab-pane').forEach(pane => pane.classList.remove('active'));
+            document.getElementById(`tab-${tabId}`).classList.add('active');
+        }
+
+        function setPlayers(val) {
+            selectedPlayers = val;
+            document.querySelectorAll('.player-option').forEach(opt => {
+                opt.classList.remove('active');
+                if(opt.dataset.val == val) opt.classList.add('active');
+            });
+        }
+        function startGame() { window.location.href = `game.html?players=${selectedPlayers}`; }
+
+        window.onload = () => {
+            checkLogin();
+            loadHistory();
+        };
+    </script>
+</body>
+</html>
