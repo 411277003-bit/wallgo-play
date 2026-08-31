@@ -80,3 +80,7 @@ node eval_vs_random.mjs alpha_model 20 100   # 對隨機對手評估
 
 背景音樂 **Carefree** by Kevin MacLeod（[incompetech.com](https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1100199)），
 授權 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)。
+
+音效出自 **Kenney** 的 [Casino Audio](https://kenney.nl/assets/casino-audio) 與
+[Impact Sounds](https://kenney.nl/assets/impact-sounds)，授權
+[CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/)。

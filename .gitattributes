@@ -6,3 +6,4 @@
 # 二進位：不做任何換行轉換
 *.bin binary
 *.mp3 binary
+*.ogg binary

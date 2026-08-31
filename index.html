@@ -483,7 +483,7 @@ body{
   <audio id="bgm" loop preload="none" src="assets/bgm.mp3"></audio>
 
   <div class="tools">
-    <button class="tool" id="mute" title="音樂"><svg viewBox="0 0 24 24"><path d="M9 9h3l4-3v12l-4-3H9z"/><path d="M18 9c1 1.6 1 4.4 0 6"/></svg></button>
+    <button class="tool" id="mute" title="音樂／音效"><svg viewBox="0 0 24 24"><path d="M9 9h3l4-3v12l-4-3H9z"/><path d="M18 9c1 1.6 1 4.4 0 6"/></svg></button>
     <button class="tool" data-act="help" title="規則"><svg viewBox="0 0 24 24"><path d="M9.5 9a2.6 2.6 0 1 1 3.4 2.5c-.6.3-.9.9-.9 1.6v.6"/><circle cx="12" cy="17.4" r=".7" fill="currentColor" stroke="none"/></svg></button>
     <button class="tool" data-act="info" title="系統資訊"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6"/><circle cx="12" cy="7.6" r=".7" fill="currentColor" stroke="none"/></svg></button>
     <button class="tool" data-act="settings" title="設定"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></svg></button>
@@ -617,9 +617,9 @@ body{
   <div class="modal">
     <h3>Settings</h3><p class="sub">設定</p>
     <div class="stat"><span>背景動畫</span><i id="set-anim">開啟</i></div>
-    <div class="stat"><span>音樂</span><i id="set-music">開啟</i></div>
+    <div class="stat"><span>音樂／音效</span><i id="set-music">開啟</i></div>
     <button class="btn" style="margin-top:18px" onclick="toggleAnim()">切換背景動畫</button>
-    <button class="btn" onclick="toggleMusic()">切換音樂</button>
+    <button class="btn" onclick="toggleMusic()">切換音樂／音效</button>
     <button class="btn" onclick="closeModal('settings-modal');openProfileEditor()">編輯個人資料</button>
     <button class="btn danger" onclick="logout()">登出帳號</button>
     <button class="close" onclick="closeModal('settings-modal')">關閉</button>
@@ -648,10 +648,15 @@ body{
     <div class="stat"><span>目前版本</span><i>v12（新版大廳）</i></div>
     <div class="stat"><span>連線狀態</span><i id="conn-state">連線中…</i></div>
     <div class="stat"><span>背景音樂</span><i>Carefree — Kevin MacLeod</i></div>
+    <div class="stat"><span>音效</span><i>Kenney（CC0）</i></div>
     <p class="hint" style="margin-top:14px;line-height:1.8">
       音樂：<a href="https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1100199" target="_blank" rel="noopener">Carefree</a>
       by Kevin MacLeod，授權
-      <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>。
+      <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>。<br>
+      音效：<a href="https://kenney.nl/assets/casino-audio" target="_blank" rel="noopener">Casino Audio</a> ／
+      <a href="https://kenney.nl/assets/impact-sounds" target="_blank" rel="noopener">Impact Sounds</a>
+      by Kenney，授權
+      <a href="https://creativecommons.org/publicdomain/zero/1.0/" target="_blank" rel="noopener">CC0</a>。
     </p>
     <p class="hint" style="margin-top:16px;text-align:center;color:var(--brass-soft)">已成功連接至雲端資料庫</p>
     <button class="close" onclick="closeModal('info-modal')">關閉</button>
@@ -661,6 +666,57 @@ body{
 <div class="toast" id="toast"></div>
 
 <script>
+/* ═════════ 設定 / 音樂 ═════════ */
+const muteBtn = document.getElementById('mute');
+if (localStorage.getItem('wallGoMusic') === 'off') muteBtn.classList.add('off');
+muteBtn.onclick = () => toggleMusic();
+
+/* 背景音樂：assets/bgm.mp3（Carefree — Kevin MacLeod, CC BY 4.0）。
+   瀏覽器一律禁止未經互動的自動播放，所以真正開聲是在第一次點擊／按鍵時。 */
+const BGM_VOLUME = 0.3;
+const bgmEl = document.getElementById('bgm');
+
+function musicOn(){ return !muteBtn.classList.contains('off'); }
+
+function startMusic(){
+  if (!musicOn()) return;
+  bgmEl.volume = BGM_VOLUME;
+  bgmEl.play().catch(err => console.warn('背景音樂無法播放：', err));
+}
+
+function stopMusic(){ bgmEl.pause(); }
+
+/* 音效：Kenney 的 CC0 音效包，跟著背景對局動畫觸發。
+   與背景音樂共用同一顆 🔈 開關。 */
+const SFX_VOLUME = 0.38;
+const SFX = {
+  move:  'assets/sfx/piece-move.ogg',    /* 圓柱棋子落定 */
+  wall:  'assets/sfx/wall-build.ogg',    /* 木板立起 */
+  break: 'assets/sfx/wall-break.ogg',    /* 重擊破牆 */
+};
+const sfxEls = {};
+for (const [name, src] of Object.entries(SFX)) {
+  const a = new Audio(src);
+  a.preload = 'auto';
+  a.volume = SFX_VOLUME;
+  sfxEls[name] = a;
+}
+
+let audioUnlocked = false;
+
+function playSfx(name){
+  /* 使用者互動前瀏覽器會擋掉播放，先不要浪費一次 play() */
+  if (!audioUnlocked || !musicOn()) return;
+  const a = sfxEls[name];
+  if (!a) return;
+  a.currentTime = 0;
+  a.play().catch(() => {});
+}
+
+['pointerdown', 'keydown'].forEach(ev =>
+  window.addEventListener(ev, () => { audioUnlocked = true; startMusic(); },
+                          { once: true, passive: true }));
+
 /* ═════════ 背景：Wall Go 對局模擬（棋子移動 + 建牆） ═════════ */
 const cv = document.getElementById('board'), ctx = cv.getContext('2d');
 const N = 7, SHEAR = 0, SQUASH = .58;
@@ -822,6 +878,7 @@ function drawHammer(pc, ang, alpha){
   ctx.restore();
 }
 function smashWall(key, info, now){
+  playSfx('break');
   const [xs,ys,d]=key.split(','); const x=+xs, y=+ys;
   const col=C.p[info.p];
   const cx = d==='H' ? x+0.5 : x;
@@ -881,6 +938,7 @@ function startMove(now){
   actor=pick(mine); const paths=reach(actor);
   path=pick(paths); from={x:actor.x,y:actor.y};
   phase='move'; t0=now;
+  playSfx('move');
 }
 function nextTurn(now){
   if(moveCount>=36){ phase='reset'; t0=now; return; }
@@ -962,7 +1020,7 @@ function step(now){
     if(k===1){
       const end=path[seg-1]; actor.x=end[0]; actor.y=end[1]; actor.dx=end[0]; actor.dy=end[1];
       const sp=wallSpots(actor.x,actor.y);
-      if(sp.length){ newWall=pick(sp); walls.set(newWall,{p:actor.p,t:now}); }
+      if(sp.length){ newWall=pick(sp); walls.set(newWall,{p:actor.p,t:now}); playSfx('wall'); }
       phase='wall'; t0=now;
     }
   }
@@ -1684,35 +1742,12 @@ async function handleFriendReq(requesterId, action){
   } catch(e) { toast('連線失敗！'); }
 }
 
-/* ═════════ 設定 / 音樂 ═════════ */
-const muteBtn = document.getElementById('mute');
-if (localStorage.getItem('wallGoMusic') === 'off') muteBtn.classList.add('off');
-muteBtn.onclick = () => toggleMusic();
-
-/* 背景音樂：assets/bgm.mp3（Carefree — Kevin MacLeod, CC BY 4.0）。
-   瀏覽器一律禁止未經互動的自動播放，所以真正開聲是在第一次點擊／按鍵時。 */
-const BGM_VOLUME = 0.3;
-const bgmEl = document.getElementById('bgm');
-
-function musicOn(){ return !muteBtn.classList.contains('off'); }
-
-function startMusic(){
-  if (!musicOn()) return;
-  bgmEl.volume = BGM_VOLUME;
-  bgmEl.play().catch(err => console.warn('背景音樂無法播放：', err));
-}
-
-function stopMusic(){ bgmEl.pause(); }
-
-['pointerdown', 'keydown'].forEach(ev =>
-  window.addEventListener(ev, () => startMusic(), { once: true, passive: true }));
-
 function toggleMusic(){
   muteBtn.classList.toggle('off');
   const off = muteBtn.classList.contains('off');
   localStorage.setItem('wallGoMusic', off ? 'off' : 'on');
   if (off) stopMusic(); else startMusic();
-  toast(off ? '音樂已關閉' : '音樂已開啟');
+  toast(off ? '音樂與音效已關閉' : '音樂與音效已開啟');
   syncSettingsUI();
 }
 
