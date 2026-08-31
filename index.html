@@ -146,13 +146,7 @@ body{
 .feed li b{color:var(--outline);font-weight:700}
 
 /* ── 開始遊戲 ── */
-.launch{grid-column:3;grid-row:3;justify-self:end;display:flex;flex-direction:column;gap:12px;align-items:flex-end}
-.pcs{display:flex;gap:8px;align-items:center}
-.pc{min-width:46px;padding:9px 15px;border:var(--bw) solid var(--outline);border-radius:999px;
-  background:var(--cream-hi);color:var(--ink);font-family:var(--serif);font-size:13px;font-weight:600;
-  cursor:pointer;transition:.16s}
-.pc:hover{background:var(--yellow)}
-.pc.active{background:var(--blue);color:var(--cream-hi)}
+.launch{grid-column:3;grid-row:3;justify-self:end;display:flex;align-items:flex-end}
 .start{cursor:pointer;display:grid;place-items:center;width:76px;height:76px;border-radius:50%;
   border:3px solid var(--outline);color:var(--outline);font-family:var(--serif);
   font-size:40px;font-weight:700;line-height:1;padding:0 0 6px 4px;background:var(--yellow);
@@ -377,8 +371,7 @@ body{
   .card{width:100%;height:auto;max-height:none;padding:16px 18px;border-radius:26px;align-items:flex-start}
   .cico{display:none}
   .cbody{flex:1;min-width:0;opacity:1}
-  .launch{grid-column:1;grid-row:4;justify-self:stretch;align-items:center}
-  .pcs{justify-content:center;flex-wrap:wrap}
+  .launch{grid-column:1;grid-row:4;justify-self:stretch;justify-content:center}
   .tools{display:none}
   .brand h1{font-size:44px}
 }
@@ -499,16 +492,10 @@ body{
   </div>
 
   <div class="launch">
-    <div class="pcs">
-      <button class="pc" data-val="ai" onclick="setPlayers('ai')">AI</button>
-      <button class="pc" data-val="2" onclick="setPlayers(2)">2</button>
-      <button class="pc active" data-val="3" onclick="setPlayers(3)">3</button>
-      <button class="pc" data-val="4" onclick="setPlayers(4)">4</button>
-    </div>
     <button class="start" data-act="start" title="開始遊戲" aria-label="開始遊戲">›</button>
   </div>
 
-  <audio id="bgm" loop preload="auto" src="assets/bgm.mp3"></audio>
+  <audio id="bgm" loop preload="none" src="assets/bgm.mp3"></audio>
 
   <div class="tools">
     <button class="tool" id="mute" title="音樂"><svg viewBox="0 0 24 24"><path d="M9 9h3l4-3v12l-4-3H9z"/><path d="M18 9c1 1.6 1 4.4 0 6"/></svg></button>
@@ -675,6 +662,12 @@ body{
     <div class="stat"><span>遊戲名稱</span><i>Wall Go（源自魔鬼的計謀）</i></div>
     <div class="stat"><span>目前版本</span><i>v12（新版大廳）</i></div>
     <div class="stat"><span>連線狀態</span><i id="conn-state">連線中…</i></div>
+    <div class="stat"><span>背景音樂</span><i>Carefree — Kevin MacLeod</i></div>
+    <p class="hint" style="margin-top:14px;line-height:1.8">
+      音樂：<a href="https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1100199" target="_blank" rel="noopener">Carefree</a>
+      by Kevin MacLeod，授權
+      <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>。
+    </p>
     <p class="hint" style="margin-top:16px;text-align:center;color:var(--brass-soft)">已成功連接至雲端資料庫</p>
     <button class="close" onclick="closeModal('info-modal')">關閉</button>
   </div>
@@ -1130,7 +1123,7 @@ addEventListener('keydown', e=>{ if(e.key==='Escape') closeAllModals(); });
 
 /* ═════════ 帳號 / 大廳資料 ═════════ */
 let currentUser = null;
-let selectedPlayers = 3;
+let selectedPlayers = localStorage.getItem('wallGoPlayers') || 3;
 let globalHistoryData = [];
 
 const API_URL = 'https://wallgo-play.onrender.com';
@@ -1157,9 +1150,7 @@ document.querySelectorAll('[data-act]').forEach(b=>b.onclick=()=>{
 /* ═════════ 單機遊戲 ═════════ */
 function setPlayers(val){
   selectedPlayers = val;
-  document.querySelectorAll('.pc').forEach(opt=>{
-    opt.classList.toggle('active', String(opt.dataset.val) === String(val));
-  });
+  localStorage.setItem('wallGoPlayers', val);
   document.querySelectorAll('#solo-chips .chip').forEach(c=>{
     c.setAttribute('aria-pressed', String(c.dataset.val) === String(val) ? 'true' : 'false');
   });

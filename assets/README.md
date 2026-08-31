@@ -2,11 +2,19 @@
 
 ## bgm.mp3
 
-大廳背景音樂。把你的音樂檔命名為 `bgm.mp3` 放進這個資料夾就會自動播放，
-由 `index.html` 右下角工具列的 🔈 按鈕開關（設定會記在 localStorage）。
+大廳背景音樂，由 `index.html` 右下角工具列的 🔈 按鈕開關（設定記在 localStorage）。
 
-檔案不存在時不會報錯 —— `index.html` 會改用 Web Audio API 即時合成的
-五聲音階環境音墊底，所以網站永遠有聲音。
+目前使用的曲目：
 
-建議：循環無縫、音量正規化到 -16 LUFS 上下、檔案控制在 2 MB 以內。
+> **Carefree** — Kevin MacLeod ([incompetech.com](https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1100199))
+> 授權：[Creative Commons Attribution 4.0](https://creativecommons.org/licenses/by/4.0/)
+
+CC BY 4.0 要求標示出處，署名已放在 `index.html` 的「系統資訊」視窗中。
+換掉這首歌時請一併更新那裡的署名，或改用不需署名的授權（CC0／public domain）。
+
+檔案約 6.3 MB，因此 `<audio>` 設為 `preload="none"` —— 沒開音樂的使用者不會被迫下載。
 瀏覽器政策禁止自動播放，音樂會在使用者第一次點擊或按鍵時才開始。
+
+想換成自己的音樂，直接覆蓋 `bgm.mp3` 即可，不用改程式。
+檔案不存在或載入失敗時也不會報錯 —— `index.html` 會改用 Web Audio API
+即時合成的五聲音階環境音墊底。
