@@ -899,11 +899,13 @@ let shards=[], bursts=[], breakers=[true,true,true,true], lastBreak=-99;
 let introHero=null, armAlpha=0, hammerAng=0, introSmashed=false, shake=0, cageKeys=[];
 let impact=null, NOW=0, introStage=null;
 
-/* 牆的視覺厚度與深色邊佔比（單位：格 / 比例）。
-   不用立體擠出：擠出量只會加在螢幕的 Y 軸上，對橫牆是加在厚度、
-   對直牆是加在長度，兩個方向永遠不可能一樣大。改畫平面長條後，
-   直牆就是橫牆轉 90 度，尺寸與亮暗比例都完全相同。 */
-const WALL_VIS = 0.45, WALL_DARK = 2/3;
+/* 牆：footprint 半厚 WALL_T、浮起位移 WALL_D（單位：格）。
+   關鍵在浮起是往「左上」的等量斜向位移，而不是只往上 —— 只往上的話
+   位移量只加在 Y 軸，對橫牆是加在厚度、對直牆是加在長度，兩個方向
+   永遠不可能一樣大。斜向位移同時加在 X 與 Y，兩者的視覺尺寸就都是
+   (2*WALL_T + WALL_D) × 1 格，是同一個形狀轉 90 度。 */
+const WALL_T = 0.06, WALL_D = 0.18;
+const WALL_VIS = 2*WALL_T + WALL_D;
 
 const JOLT_ZERO = { z:0, ox:0, oy:0 };
 /* 座標雜湊：同一格每幀都得到同一組亂數，物件才不會逐幀抖動 */
@@ -1173,33 +1175,32 @@ function drawBoard(){
   poly(c); ctx.strokeStyle='rgba(19,41,75,.55)'; ctx.lineWidth=2; ctx.stroke();
 }
 
+/* 往左上浮起 d 格的立體板：先用暗面填滿 base→top 之間的側牆，
+   再把亮色頂面畫上去，暗面自然留在右下兩側（光源在左上）。 */
+function slab(bx0,by0,bx1,by1,d,side,top,lift=0){
+  const b=[proj(bx0,by0,lift),proj(bx1,by0,lift),proj(bx1,by1,lift),proj(bx0,by1,lift)];
+  const u=[proj(bx0-d,by0-d,lift),proj(bx1-d,by0-d,lift),proj(bx1-d,by1-d,lift),proj(bx0-d,by1-d,lift)];
+  ctx.fillStyle=side;
+  for(let i=0;i<4;i++){ poly([b[i],b[(i+1)%4],u[(i+1)%4],u[i]]); ctx.fill(); }
+  poly(u); ctx.fillStyle=top; ctx.fill();
+}
+
 function drawWall(key, info, now){
-  const [xs,ys,d]=key.split(','); const x=+xs,y=+ys;
+  const [xs,ys,dir]=key.split(','); const x=+xs,y=+ys;
   const age=Math.min((now-info.t)/420,1);
-  let g=(info.t?easeBack(age):1);            /* 彈出動畫：由細長成正常厚度 */
+  let g=(info.t?easeBack(age):1);            /* 浮起的進度，easeBack 會微微過衝 */
   if(phase==='reset') g*=1-fade;
   if(g<=0.02) return;
 
-  const col=C.p[info.p];
-  const j = d==='H' ? joltAt(x+0.5,y) : joltAt(x,y+0.5);
-  const T  = WALL_VIS*g/2;                   /* 半厚（格）*/
-  const Dk = WALL_VIS*g*WALL_DARK;           /* 深色邊寬度（格）*/
+  const col=C.p[info.p], T=WALL_T, D=WALL_D, d=D*g;
+  const j = dir==='H' ? joltAt(x+0.5,y) : joltAt(x,y+0.5);
 
-  const quad=(pts,fill)=>{
-    poly(pts.map(([px,py])=>proj(px+j.ox, py+j.oy, j.z)));
-    ctx.fillStyle=fill; ctx.fill();
-  };
-
-  /* 亮色在上／左，深色邊在下／右 —— 光源在左上，與棋子的投影方向一致。
-     長條置中於格線，直橫兩向就是同一個長條旋轉 90 度。 */
-  if(d==='H'){
-    const y0=y-T, y1=y+T, ym=y1-Dk;
-    quad([[x,y0],[x+1,y0],[x+1,ym],[x,ym]], col.wall);
-    quad([[x,ym],[x+1,ym],[x+1,y1],[x,y1]], col.wallSide);
+  /* footprint 依最終位移量擺放，浮起後視覺剛好是 (2T+D) × 1 格、置中於格線；
+     動畫過程中頂面由 base 往左上升起，看起來就是牆浮出棋盤。 */
+  if(dir==='H'){
+    slab(x+D+j.ox, y+D/2-T+j.oy, x+1+j.ox, y+D/2+T+j.oy, d, col.wallSide, col.wall, j.z);
   } else {
-    const x0=x-T, x1=x+T, xm=x1-Dk;
-    quad([[x0,y],[xm,y],[xm,y+1],[x0,y+1]], col.wall);
-    quad([[xm,y],[x1,y],[x1,y+1],[xm,y+1]], col.wallSide);
+    slab(x+D/2-T+j.ox, y+D+j.oy, x+D/2+T+j.ox, y+1+j.oy, d, col.wallSide, col.wall, j.z);
   }
 }
 
