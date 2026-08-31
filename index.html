@@ -153,13 +153,12 @@ body{
   cursor:pointer;transition:.16s}
 .pc:hover{background:var(--yellow)}
 .pc.active{background:var(--blue);color:var(--cream-hi)}
-.start{cursor:pointer;display:flex;align-items:center;gap:14px;padding:17px 44px;border-radius:999px;
+.start{cursor:pointer;display:grid;place-items:center;width:76px;height:76px;border-radius:50%;
   border:3px solid var(--outline);color:var(--outline);font-family:var(--serif);
-  font-size:21px;font-weight:700;letter-spacing:.1em;background:var(--yellow);
+  font-size:40px;font-weight:700;line-height:1;padding:0 0 6px 4px;background:var(--yellow);
   transition:transform .14s,background .16s}
 .start:hover{background:#f7ce62;transform:translateY(-3px)}
 .start:active{transform:translateY(1px)}
-.start svg{width:22px;height:22px;fill:var(--outline)}
 
 .tools{grid-column:1;grid-row:3;align-self:end;display:flex;gap:10px}
 .tool{width:52px;height:52px;border:var(--bw) solid var(--outline);border-radius:50%;background:var(--cream-hi);
@@ -195,6 +194,7 @@ body{
 .modal.rules .stat i{white-space:nowrap}
 
 .opt{display:flex;gap:9px;margin-top:14px;flex-wrap:wrap}
+.modal .sub+.opt{margin-top:0}   /* 說明段落移除後，副標與選項之間不再補間距 */
 .chip{padding:8px 16px;border:2px solid var(--outline);border-radius:999px;background:var(--cream);
   color:var(--ink);font-family:var(--serif);font-size:13px;font-weight:600;cursor:pointer;transition:.16s}
 .chip:hover{background:var(--yellow)}
@@ -350,12 +350,12 @@ body{
   .brand hr{margin-top:8px}
   .count strong{font-size:40px}
   .card h2{margin-bottom:10px}
-  .start{padding:14px 34px;font-size:19px}
+  .start{width:66px;height:66px;font-size:35px}
 }
 @media (max-height:600px){
   .side-rail{gap:10px}
   .rows{margin-top:10px;padding-top:9px}
-  .start{padding:12px 28px;font-size:17px}
+  .start{width:58px;height:58px;font-size:31px}
   .tools{display:none}
 }
 
@@ -377,8 +377,7 @@ body{
   .card{width:100%;height:auto;max-height:none;padding:16px 18px;border-radius:26px;align-items:flex-start}
   .cico{display:none}
   .cbody{flex:1;min-width:0;opacity:1}
-  .launch{grid-column:1;grid-row:4;justify-self:stretch;align-items:stretch}
-  .start{justify-content:center;font-size:19px;padding:16px}
+  .launch{grid-column:1;grid-row:4;justify-self:stretch;align-items:center}
   .pcs{justify-content:center;flex-wrap:wrap}
   .tools{display:none}
   .brand h1{font-size:44px}
@@ -506,10 +505,10 @@ body{
       <button class="pc active" data-val="3" onclick="setPlayers(3)">3</button>
       <button class="pc" data-val="4" onclick="setPlayers(4)">4</button>
     </div>
-    <button class="start" data-act="start">
-      <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>開始遊戲
-    </button>
+    <button class="start" data-act="start" title="開始遊戲" aria-label="開始遊戲">›</button>
   </div>
+
+  <audio id="bgm" loop preload="auto" src="assets/bgm.mp3"></audio>
 
   <div class="tools">
     <button class="tool" id="mute" title="音樂"><svg viewBox="0 0 24 24"><path d="M9 9h3l4-3v12l-4-3H9z"/><path d="M18 9c1 1.6 1 4.4 0 6"/></svg></button>
@@ -537,15 +536,12 @@ body{
 <div class="scrim" id="solo-modal">
   <div class="modal">
     <h3>Local game</h3><p class="sub">單機對戰 ・ 選擇人數</p>
-    <p class="hint">選擇「AI」與電腦對弈，或選 2～4 人在同一台裝置輪流下棋。</p>
     <div class="opt" id="solo-chips">
       <button class="chip" data-val="ai">AI</button>
       <button class="chip" data-val="2">2 人</button>
       <button class="chip" data-val="3">3 人</button>
       <button class="chip" data-val="4">4 人</button>
     </div>
-    <div class="stat" style="margin-top:18px"><span>棋盤大小</span><i>7 × 7</i></div>
-    <div class="stat"><span>每回合限時</span><i>90 秒</i></div>
     <button class="btn gold" style="margin-top:18px" onclick="startGame()">開始單機遊戲</button>
     <button class="close" onclick="closeModal('solo-modal')">關閉</button>
   </div>
@@ -1718,10 +1714,84 @@ const muteBtn = document.getElementById('mute');
 if (localStorage.getItem('wallGoMusic') === 'off') muteBtn.classList.add('off');
 muteBtn.onclick = () => toggleMusic();
 
+/* 背景音樂：優先播 assets/bgm.mp3；音檔不存在時改用 Web Audio 合成的環境音墊底。
+   瀏覽器一律禁止未經互動的自動播放，所以真正開聲是在第一次點擊／按鍵時。 */
+const BGM_VOLUME = 0.3;
+const bgmEl = document.getElementById('bgm');
+let bgmUsable = null;            // null = 尚未判定
+let synth = null;                // { ctx, master, timer }
+
+bgmEl.addEventListener('canplay',  () => { bgmUsable = true; });
+bgmEl.addEventListener('error',    () => { bgmUsable = false; if (musicOn()) startSynth(); });
+
+function musicOn(){ return !muteBtn.classList.contains('off'); }
+
+function startMusic(){
+  if (!musicOn()) return;
+  if (bgmUsable === false) { startSynth(); return; }
+  bgmEl.volume = BGM_VOLUME;
+  bgmEl.play().catch(() => { bgmUsable = false; startSynth(); });
+}
+
+function stopMusic(){
+  bgmEl.pause();
+  stopSynth();
+}
+
+/* 五聲音階的點描式環境音：沒有音檔時也不會安靜無聲 */
+function startSynth(){
+  if (synth) return;
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC) return;
+
+  const ctx = new AC();
+  const master = ctx.createGain();
+  master.gain.setValueAtTime(0, ctx.currentTime);
+  master.gain.linearRampToValueAtTime(BGM_VOLUME * 0.55, ctx.currentTime + 3);
+  master.connect(ctx.destination);
+
+  const filter = ctx.createBiquadFilter();   // 壓掉高頻，音色偏木質不刺耳
+  filter.type = 'lowpass';
+  filter.frequency.value = 950;
+  filter.Q.value = 0.6;
+  filter.connect(master);
+
+  const SCALE = [220.00, 246.94, 293.66, 329.63, 392.00, 440.00, 493.88, 587.33];
+  function pluck(){
+    const t = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const g   = ctx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.value = SCALE[Math.floor(Math.random() * SCALE.length)];
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(0.2, t + 0.7);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 4.5);
+    osc.connect(g); g.connect(filter);
+    osc.start(t); osc.stop(t + 4.6);
+  }
+  pluck();
+  synth = { ctx, master, timer: setInterval(pluck, 2600) };
+}
+
+function stopSynth(){
+  if (!synth) return;
+  const { ctx, master, timer } = synth;
+  synth = null;
+  clearInterval(timer);
+  master.gain.cancelScheduledValues(ctx.currentTime);
+  master.gain.setValueAtTime(master.gain.value, ctx.currentTime);
+  master.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.6);
+  setTimeout(() => ctx.close().catch(() => {}), 900);
+}
+
+['pointerdown', 'keydown'].forEach(ev =>
+  window.addEventListener(ev, () => startMusic(), { once: true, passive: true }));
+
 function toggleMusic(){
   muteBtn.classList.toggle('off');
   const off = muteBtn.classList.contains('off');
   localStorage.setItem('wallGoMusic', off ? 'off' : 'on');
+  if (off) stopMusic(); else startMusic();
   toast(off ? '音樂已關閉' : '音樂已開啟');
   syncSettingsUI();
 }
