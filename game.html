@@ -40,6 +40,16 @@
             --color-yellow: #f2c14a;
             --color-green: #7fa93f;
 
+            /* ── 棋盤：與大廳背景動畫同一組色（index.html 的 C 常數）── */
+            --sq-dark: #c9ab77;
+            --sq-light: #f2e3bb;
+            --sq-rim: #13294b;
+            /* 棋子／牆：body 為主色，top 為受光面，side 為暗面 */
+            --pc-red: #c4442d;    --pc-red-top: #d8583f;    --pc-red-side: #9e3320;
+            --pc-blue: #2c4a7c;   --pc-blue-top: #3f66a3;   --pc-blue-side: #1d3355;
+            --pc-yellow: #e8b12e; --pc-yellow-top: #f5c94f; --pc-yellow-side: #bd8a16;
+            --pc-green: #4c8a45;  --pc-green-top: #5fa456;  --pc-green-side: #376630;
+
             --font-serif: 'Anton', 'Archivo', 'Noto Sans TC', sans-serif;
             --font-sans: 'Archivo', 'Noto Sans TC', 'Microsoft JhengHei', sans-serif;
             --bw: 2.5px;
@@ -129,9 +139,21 @@
 
         .breaker-status { font-size: 11.5px; color: var(--text-sub); margin-top: 12px; line-height: 1.7; font-weight: 400; }
 
-        .controls { display: flex; flex-direction: column; gap: 10px; width: 100%; }
-        .controls button { display: flex; align-items: center; gap: 11px; text-align: left; }
-        .controls button span { flex: 1; }
+        /* 圓形 icon 工具列：與大廳 .tools 同一套視覺語言 */
+        .tools {
+            position: fixed; left: 28px; bottom: 28px;
+            display: flex; gap: 10px; z-index: 1000;
+        }
+        .tool {
+            width: 52px; height: 52px; padding: 0; border-radius: 50%;
+            border: var(--bw) solid var(--outline); background: var(--cream-hi); color: var(--outline);
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; transition: .16s;
+        }
+        .tool:hover { background: var(--yellow); transform: translateY(-2px); }
+        .tool:active { transform: translateY(1px); }
+        .tool .bico { width: 22px; height: 22px; flex: none; }
+
         .bico { width: 21px; height: 21px; flex: 0 0 21px; fill: currentColor; }
         .bico .stroked { fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
         .bico .spark { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
@@ -146,13 +168,10 @@
 
         #btn-breaker { background: var(--cream-lo); color: #a8a396; border-color: rgba(27,27,27,.3); cursor: not-allowed; }
         #btn-breaker:hover { transform: none; background: var(--cream-lo); }
-        #btn-breaker:not(:disabled) {
-            cursor: pointer; background: var(--red); color: var(--cream-hi); font-weight: 700;
-            border-color: var(--outline);
-        }
+        #btn-breaker:not(:disabled) { cursor: pointer; background: var(--red); color: var(--cream-hi); border-color: var(--outline); }
         #btn-breaker:not(:disabled):hover { background: #e5613e; transform: translateY(-2px); }
 
-        #btn-reset { background: var(--yellow); font-weight: 700; }
+        #btn-reset { background: var(--yellow); }
         #btn-reset:hover { background: #f7ce62; }
         .btn-back { background: var(--cream); color: var(--text-sub); }
         .btn-back:hover { background: var(--sky); color: var(--outline); }
@@ -172,10 +191,11 @@
             aspect-ratio: 1 / 1;
             height: auto;
             max-height: 100%;
-            background: var(--cream-lo);
+            background: var(--sq-dark);
             padding: 14px;
             border-radius: 28px;
-            border: 4px solid var(--outline);
+            border: 4px solid var(--sq-rim);
+            box-shadow: 0 10px 0 -2px rgba(19,41,75,.45), 0 18px 34px rgba(60,20,6,.32);
             display: grid;
             grid-template-columns: repeat(6, 1fr 0.25fr) 1fr;
             grid-template-rows: repeat(6, 1fr 0.25fr) 1fr;
@@ -184,28 +204,33 @@
         }
 
         .grid-item { display: flex; justify-content: center; align-items: center; transition: background-color .2s; }
-        .cell { background-color: var(--board-light); border-radius: 9px; cursor: pointer;
-            box-shadow: inset 0 0 0 2.5px var(--outline); }
+        .cell { background-color: var(--sq-light); border-radius: 9px; cursor: pointer;
+            box-shadow: inset 0 0 0 2.5px var(--sq-rim); }
+        .cell.cell-alt { background-color: var(--sq-dark); }
         .cell:hover { background-color: var(--yellow); }
         .wall-h, .wall-v { cursor: pointer; border-radius: 4px; }
         .intersection { background-color: transparent; }
 
+        /* 棋子：上亮下暗的漸層 ＋ 深藍描邊，做出大廳那種立體感 */
         .piece {
             border-radius: 50%; width: 76%; height: 76%;
-            border: 3px solid var(--outline);
+            border: 3px solid var(--sq-rim);
             box-sizing: border-box;
             transition: transform .2s; pointer-events: none;
+            box-shadow: 0 3px 0 rgba(19,41,75,.38), inset 0 -3px 5px rgba(0,0,0,.22);
         }
-        .piece-red { background-color: var(--color-red); }
-        .piece-blue { background-color: var(--color-blue); }
-        .piece-yellow { background-color: var(--color-yellow); }
-        .piece-green { background-color: var(--color-green); }
+        .piece-red    { background: linear-gradient(165deg, var(--pc-red-top)    38%, var(--pc-red)    100%); }
+        .piece-blue   { background: linear-gradient(165deg, var(--pc-blue-top)   38%, var(--pc-blue)   100%); }
+        .piece-yellow { background: linear-gradient(165deg, var(--pc-yellow-top) 38%, var(--pc-yellow) 100%); }
+        .piece-green  { background: linear-gradient(165deg, var(--pc-green-top)  38%, var(--pc-green)  100%); }
 
-        .wall-placed { cursor: default; }
-        .wall-red { background-color: var(--color-red) !important; border-radius: 4px; }
-        .wall-blue { background-color: var(--color-blue) !important; border-radius: 4px; }
-        .wall-yellow { background-color: var(--color-yellow) !important; border-radius: 4px; }
-        .wall-green { background-color: var(--color-green) !important; border-radius: 4px; }
+        /* 牆：主色板身 ＋ 下緣暗面，看起來像立起來的木板 */
+        .wall-placed { cursor: default; border-radius: 4px;
+            box-shadow: inset 0 -3px 0 rgba(0,0,0,.28), 0 2px 0 rgba(19,41,75,.35); }
+        .wall-red    { background-color: var(--pc-red)    !important; }
+        .wall-blue   { background-color: var(--pc-blue)   !important; }
+        .wall-yellow { background-color: var(--pc-yellow) !important; }
+        .wall-green  { background-color: var(--pc-green)  !important; }
 
         .territory-red { background-color: rgba(217, 79, 43, .42) !important; }
         .territory-blue { background-color: rgba(74, 146, 196, .42) !important; }
@@ -213,35 +238,18 @@
         .territory-green { background-color: rgba(127, 169, 63, .42) !important; }
 
         .highlight { background-color: var(--sky) !important; cursor: pointer; border-radius: 9px;
-            box-shadow: inset 0 0 0 3px var(--outline); }
+            box-shadow: inset 0 0 0 3px var(--sq-rim); }
         .highlight-wall { background-color: var(--pink) !important; cursor: pointer; border-radius: 4px;
-            box-shadow: inset 0 0 0 2px var(--outline); }
-        .selected { transform: scale(1.1); box-shadow: 0 0 0 4px var(--yellow), 0 0 0 6.5px var(--outline); }
+            box-shadow: inset 0 0 0 2px var(--sq-rim); }
+        .selected { transform: scale(1.1);
+            box-shadow: 0 0 0 4px var(--yellow), 0 0 0 6.5px var(--sq-rim), inset 0 -3px 5px rgba(0,0,0,.22); }
 
         .right-spacer { width: 240px; flex-shrink: 0; transition: width .4s cubic-bezier(.175,.885,.32,1.275); }
         /* 聊天室展開時把右欄撐開，棋盤讓位而不是被蓋住 */
         body.chat-open .right-spacer { width: 396px; }
 
-        .float-mic-btn {
-            position: fixed;
-            left: 28px;
-            bottom: 28px;
-            background: var(--cream-hi);
-            color: var(--outline);
-            border-radius: 50%;
-            width: 56px;
-            height: 56px;
-            font-size: 24px;
-            display: none;
-            align-items: center;
-            justify-content: center;
-            z-index: 1000;
-            cursor: pointer;
-            border: 3px solid var(--outline);
-            transition: all .18s;
-            padding: 0;
-        }
-        .float-mic-btn:hover { background: var(--yellow); transform: translateY(-2px); }
+        /* 只在連線對局時出現，因此預設隱藏（JS 會改成 flex） */
+        .float-mic-btn { display: none; font-size: 22px; line-height: 1; }
         .float-mic-btn.mic-active {
             background: var(--green);
             color: var(--cream-hi);
@@ -257,17 +265,19 @@
             position: fixed;
             right: 28px;
             bottom: 28px;
+            width: 56px;
+            height: 56px;
+            padding: 0;
             border: 3px solid var(--outline);
             color: var(--outline);
             background: var(--yellow);
-            border-radius: 999px;
-            padding: 14px 26px;
-            font-size: 14px;
-            font-weight: 700;
-            letter-spacing: .06em;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             z-index: 1000;
-            width: auto;
         }
+        .chat-toggle-btn .bico { width: 24px; height: 24px; flex: none; }
         .chat-toggle-btn:hover { background: #f7ce62; transform: translateY(-2px); }
 
         .chat-badge {
@@ -449,7 +459,8 @@
             .left-sidebar, .right-spacer { width: 214px; }
             .status-panel { padding: 13px; }
             .status-panel h2 { font-size: 15.5px; }
-            button { padding: 11px 13px; font-size: 13.5px; }
+            .tools { left: 20px; bottom: 20px; }
+            .chat-toggle-btn { right: 20px; bottom: 20px; }
             .chat-area { height: 92vh; }
         }
 
@@ -460,15 +471,14 @@
             body.chat-open .right-spacer { width: 0; }
             .timer-container { flex-direction: row; flex-wrap: wrap; justify-content: center; gap: 6px; }
             .timer-box { flex: 1; min-width: 45%; justify-content: center; }
-            .controls { flex-direction: row; flex-wrap: wrap; gap: 8px; }
-            .controls button { flex: 1; min-width: 30%; padding: 12px 8px; font-size: 13px; justify-content: center; gap: 8px; }
-            .controls button span { flex: 0 1 auto; }
             .board-container { width: 100%; max-width: 100%; padding-bottom: 88px; }
             .board { width: min(94vw, 500px); }
             .chat-area { width: min(88vw, 380px); right: -100vw; height: 80vh; z-index: 2000; }
             .chat-area.open { right: 10px; }
-            .chat-toggle-btn { bottom: 15px; right: 15px; padding: 12px 20px; font-size: 13px; z-index: 1999; }
-            .float-mic-btn { bottom: 15px; left: 15px; width: 50px; height: 50px; font-size: 22px; z-index: 1999; }
+            .chat-toggle-btn { bottom: 15px; right: 15px; width: 50px; height: 50px; z-index: 1999; }
+            .tools { bottom: 15px; left: 15px; gap: 8px; z-index: 1999; }
+            .tool { width: 46px; height: 46px; }
+            .tool .bico { width: 20px; height: 20px; }
         }
     </style>
 </head>
@@ -490,21 +500,6 @@
             <div id="breaker-display" class="breaker-status"></div>
         </div>
 
-        <div class="controls">
-            <button id="btn-breaker" onclick="toggleWallBreaker()" title="使用破牆">
-                <svg class="bico" viewBox="0 0 24 24"><path d="M3 8h7v4H3zM14 8h7v4h-7zM3 14h18v4H3z"/><path d="M12.4 2.6l-1.6 3.2 2.4.7-2 3.4" class="spark"/></svg>
-                <span>使用破牆</span>
-            </button>
-            <button id="btn-reset" onclick="resetGame(true)" title="重新開始">
-                <svg class="bico" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.6-5.9" class="stroked"/><path d="M20 3v5h-5" class="stroked"/></svg>
-                <span>重新開始</span>
-            </button>
-            <button class="btn-back" onclick="backToMenu()" title="回主選單">
-                <svg class="bico" viewBox="0 0 24 24"><path d="M4 11.5 12 5l8 6.5" class="stroked"/><path d="M6.5 10.5V19h11v-8.5" class="stroked"/><path d="M10 19v-4.5h4V19" class="stroked"/></svg>
-                <span>回主選單</span>
-            </button>
-        </div>
-        
         <div id="audio-container" style="display:none;"></div>
     </div>
 
@@ -514,10 +509,21 @@
 
     <div class="right-spacer"></div>
 
-    <button id="float-mic-btn" class="float-mic-btn" onclick="toggleMic()" title="開啟/關閉語音">🎤</button>
+    <div class="tools">
+        <button class="tool" id="btn-breaker" onclick="toggleWallBreaker()" title="使用破牆" aria-label="使用破牆">
+            <svg class="bico" viewBox="0 0 24 24"><path d="M3 8h7v4H3zM14 8h7v4h-7zM3 14h18v4H3z"/><path d="M12.4 2.6l-1.6 3.2 2.4.7-2 3.4" class="spark"/></svg>
+        </button>
+        <button class="tool" id="btn-reset" onclick="resetGame(true)" title="重新開始" aria-label="重新開始">
+            <svg class="bico" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.6-5.9" class="stroked"/><path d="M20 3v5h-5" class="stroked"/></svg>
+        </button>
+        <button class="tool btn-back" onclick="backToMenu()" title="回主選單" aria-label="回主選單">
+            <svg class="bico" viewBox="0 0 24 24"><path d="M4 11.5 12 5l8 6.5" class="stroked"/><path d="M6.5 10.5V19h11v-8.5" class="stroked"/><path d="M10 19v-4.5h4V19" class="stroked"/></svg>
+        </button>
+        <button class="tool float-mic-btn" id="float-mic-btn" onclick="toggleMic()" title="開啟／關閉語音" aria-label="開啟或關閉語音">🎤</button>
+    </div>
 
-    <button class="chat-toggle-btn" onclick="toggleChat()">
-        💬 展開聊天室
+    <button class="chat-toggle-btn" onclick="toggleChat()" title="展開聊天室" aria-label="展開聊天室">
+        <svg class="bico" viewBox="0 0 24 24"><path d="M21 11.6c0 4-3.9 7.2-8.7 7.2-1 0-2-.14-2.9-.4L4 21l1.5-3.5C3.9 16.2 3 14 3 11.6 3 7.6 6.9 4.4 11.7 4.4S21 7.6 21 11.6z" class="stroked"/></svg>
         <span id="chat-badge" class="chat-badge">!</span>
     </button>
 
@@ -840,6 +846,7 @@
                     div.classList.add('grid-item'); div.dataset.r = r; div.dataset.c = c;
                     if (r % 2 === 0 && c % 2 === 0) {
                         div.classList.add('cell'); div.onclick = () => handleCellClick(r, c);
+                        if (((r / 2) + (c / 2)) % 2 === 1) div.classList.add('cell-alt');
                     } else if (r % 2 !== 0 && c % 2 === 0) {
                         div.classList.add('wall-h'); div.onclick = () => handleWallClick(r, c);
                     } else if (r % 2 === 0 && c % 2 !== 0) {

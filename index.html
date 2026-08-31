@@ -1705,75 +1705,20 @@ const muteBtn = document.getElementById('mute');
 if (localStorage.getItem('wallGoMusic') === 'off') muteBtn.classList.add('off');
 muteBtn.onclick = () => toggleMusic();
 
-/* 背景音樂：優先播 assets/bgm.mp3；音檔不存在時改用 Web Audio 合成的環境音墊底。
+/* 背景音樂：assets/bgm.mp3（Carefree — Kevin MacLeod, CC BY 4.0）。
    瀏覽器一律禁止未經互動的自動播放，所以真正開聲是在第一次點擊／按鍵時。 */
 const BGM_VOLUME = 0.3;
 const bgmEl = document.getElementById('bgm');
-let bgmUsable = null;            // null = 尚未判定
-let synth = null;                // { ctx, master, timer }
-
-bgmEl.addEventListener('canplay',  () => { bgmUsable = true; });
-bgmEl.addEventListener('error',    () => { bgmUsable = false; if (musicOn()) startSynth(); });
 
 function musicOn(){ return !muteBtn.classList.contains('off'); }
 
 function startMusic(){
   if (!musicOn()) return;
-  if (bgmUsable === false) { startSynth(); return; }
   bgmEl.volume = BGM_VOLUME;
-  bgmEl.play().catch(() => { bgmUsable = false; startSynth(); });
+  bgmEl.play().catch(err => console.warn('背景音樂無法播放：', err));
 }
 
-function stopMusic(){
-  bgmEl.pause();
-  stopSynth();
-}
-
-/* 五聲音階的點描式環境音：沒有音檔時也不會安靜無聲 */
-function startSynth(){
-  if (synth) return;
-  const AC = window.AudioContext || window.webkitAudioContext;
-  if (!AC) return;
-
-  const ctx = new AC();
-  const master = ctx.createGain();
-  master.gain.setValueAtTime(0, ctx.currentTime);
-  master.gain.linearRampToValueAtTime(BGM_VOLUME * 0.55, ctx.currentTime + 3);
-  master.connect(ctx.destination);
-
-  const filter = ctx.createBiquadFilter();   // 壓掉高頻，音色偏木質不刺耳
-  filter.type = 'lowpass';
-  filter.frequency.value = 950;
-  filter.Q.value = 0.6;
-  filter.connect(master);
-
-  const SCALE = [220.00, 246.94, 293.66, 329.63, 392.00, 440.00, 493.88, 587.33];
-  function pluck(){
-    const t = ctx.currentTime;
-    const osc = ctx.createOscillator();
-    const g   = ctx.createGain();
-    osc.type = 'triangle';
-    osc.frequency.value = SCALE[Math.floor(Math.random() * SCALE.length)];
-    g.gain.setValueAtTime(0.0001, t);
-    g.gain.linearRampToValueAtTime(0.2, t + 0.7);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + 4.5);
-    osc.connect(g); g.connect(filter);
-    osc.start(t); osc.stop(t + 4.6);
-  }
-  pluck();
-  synth = { ctx, master, timer: setInterval(pluck, 2600) };
-}
-
-function stopSynth(){
-  if (!synth) return;
-  const { ctx, master, timer } = synth;
-  synth = null;
-  clearInterval(timer);
-  master.gain.cancelScheduledValues(ctx.currentTime);
-  master.gain.setValueAtTime(master.gain.value, ctx.currentTime);
-  master.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.6);
-  setTimeout(() => ctx.close().catch(() => {}), 900);
-}
+function stopMusic(){ bgmEl.pause(); }
 
 ['pointerdown', 'keydown'].forEach(ev =>
   window.addEventListener(ev, () => startMusic(), { once: true, passive: true }));
