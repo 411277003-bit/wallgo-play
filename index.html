@@ -258,6 +258,8 @@ body{
 
 .auth{position:fixed;inset:0;display:none;place-items:center;padding:20px;z-index:15;overflow-y:auto}
 .auth.on{display:grid}
+/* 開場結束後棋盤讓到右半邊，登入卡置於左半邊（與 applyLayout 的斷點一致） */
+@media (min-width:900px){ .auth{padding-right:56%} }
 .auth-inner{width:min(440px,100%);text-align:center}
 .auth-inner h1{font-family:var(--display);font-size:clamp(52px,7.8vw,74px);font-weight:400;
   letter-spacing:.04em;margin:0 0 10px;color:var(--cream-hi);line-height:1;
@@ -764,14 +766,35 @@ const C = {
 };
 
 let W, H, S, OX, OY;
+
+/* 版面有兩種：開場動畫置中，開場結束（登入卡出現）後棋盤讓到右半邊。
+   layoutT 是兩者之間的插值，0=置中、1=靠右，在 draw() 裡緩動過去。
+   視窗太窄時左右分欄擠不下，一律維持置中（與 CSS 的 900px 斷點一致）。 */
+const LAYOUT_MIN_W = 900;
+let layoutT = 0, layoutTarget = 0;
+
+function setLayout(t, instant){
+  layoutTarget = t;
+  if(instant){ layoutT = t; applyLayout(); }
+}
+
+function applyLayout(){
+  const t = W >= LAYOUT_MIN_W ? layoutT : 0;
+  /* 置中：整個視窗都可用；靠右：只剩右側約 55% 的寬度 */
+  const s0 = Math.min(W/8.0, H/7.8);
+  const s1 = Math.min(W*0.55/7.4, H/7.8);
+  S  = Math.max(s0 + (s1-s0)*t, 40);
+  OX = W * (0.5 + (0.71-0.5)*t);
+  OY = H * 0.52;
+}
+
 function resize(){
   const dpr = Math.min(devicePixelRatio||1, 2);
   W = innerWidth; H = innerHeight;
   cv.width = W*dpr; cv.height = H*dpr;
   cv.style.width = W+'px'; cv.style.height = H+'px';
   ctx.setTransform(dpr,0,0,dpr,0,0);
-  S = Math.max(Math.min(W/8.4, H/8.4), 40);
-  OX = W*0.5; OY = H*0.52;
+  applyLayout();
 }
 addEventListener('resize', resize); resize();
 
@@ -1154,6 +1177,11 @@ function drawPiece(pc){
 
 function draw(now){
   NOW=now;
+  if(layoutT !== layoutTarget){
+    layoutT += (layoutTarget - layoutT) * 0.075;
+    if(Math.abs(layoutTarget - layoutT) < 0.0015) layoutT = layoutTarget;
+    applyLayout();
+  }
   ctx.clearRect(0,0,W,H);
   ctx.save();
   if(shake>0){                       /* 重擊的螢幕震動 + 推鏡 */
@@ -1429,6 +1457,7 @@ async function resetPassword(){
 
 /* 開場動畫的接力點：畫布把牆打破時呼叫，UI 才開始滑入 */
 function onIntroBreak(){
+  setLayout(1);                       /* 棋盤讓到右半邊，左半邊留給登入卡 */
   const el=document.getElementById('auth-page');
   el.classList.remove('intro-wait');
   el.classList.add('intro-play');
@@ -1441,11 +1470,14 @@ function checkLogin(){
     currentUser = JSON.parse(savedSession);
     document.getElementById('auth-page').classList.remove('on');
     document.getElementById('stage').classList.add('on');
+    /* 大廳的 UI 本來就左右都有，棋盤回到置中當整片背景 */
+    setLayout(0);
     updateProfileUI();
   } else {
     const el=document.getElementById('auth-page');
     /* 開場動畫播完前先藏著；不播動畫時直接顯示 */
     if(!REDUCED && !el.classList.contains('intro-play')) el.classList.add('intro-wait');
+    else setLayout(1, true);          /* 不播開場就沒有過場，直接就定位 */
     el.classList.add('on');
     document.getElementById('stage').classList.remove('on');
   }
