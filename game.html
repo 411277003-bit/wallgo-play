@@ -626,11 +626,13 @@
             socket.emit('join_game_room', { room_code: roomCode, user_id: session.id });
 
             socket.on('init_game', (data) => {
+                // 先亮出語音按鈕：就算下面的畫面更新丟出例外，麥克風也不會跟著消失
+                const micBtn = document.getElementById('float-mic-btn');
+                if (micBtn) micBtn.style.display = 'flex';
+
                 myOnlineColor = data.my_color;
                 if (data.room_players) colorToName = data.room_players;
                 updateUI();
-                
-                document.getElementById('float-mic-btn').style.display = 'flex';
 
                 if (myOnlineColor !== 'red') {
                     setTimeout(() => {
@@ -659,10 +661,16 @@
             socket.on('receive_chat', (data) => {
                 if (data.message.startsWith('[SYS_PEER_ID]:')) {
                     if (isMicOn && data.color !== myOnlineColor) {
-                        const remotePeerId = data.message.split(':')[1];
-                        if (myPeer) {
-                            const call = myPeer.call(remotePeerId, localStream);
-                            handleCallStream(call);
+                        const remotePeerId = data.message.slice('[SYS_PEER_ID]:'.length).trim();
+                        // 兩邊同時開麥時只讓 id 較小的一方主動撥出，避免互撥產生重複音軌與回音
+                        const shouldDial = myPeer && remotePeerId && !connectedPeers.has(remotePeerId)
+                                           && myPeer.id && myPeer.id < remotePeerId;
+                        if (shouldDial) {
+                            connectedPeers.add(remotePeerId);
+                            handleCallStream(myPeer.call(remotePeerId, localStream));
+                        } else if (myPeer && remotePeerId && !connectedPeers.has(remotePeerId)) {
+                            // 由對方撥過來；把自己的 id 再廣播一次確保對方收得到
+                            socket.emit('send_chat', { room_code: roomCode, user_name: session ? session.name : '玩家', color: myOnlineColor, message: `[SYS_PEER_ID]:${myPeer.id}` });
                         }
                     }
                     return; 
@@ -1395,6 +1403,7 @@
         let localStream = null;
         let myPeer = null;
         let isMicOn = false;
+        const connectedPeers = new Set();
 
         async function toggleMic() {
             const btn = document.getElementById('float-mic-btn');
@@ -1419,8 +1428,14 @@
                     });
 
                     myPeer.on('call', (call) => {
+                        connectedPeers.add(call.peer);
                         call.answer(localStream);
                         handleCallStream(call);
+                    });
+
+                    myPeer.on('error', (err) => {
+                        console.error('PeerJS error:', err);
+                        appendChatMessage('系統', 'yellow', `⚠️ 語音連線發生問題（${err.type || err.message}），請重新開關麥克風。`);
                     });
 
                     appendChatMessage('系統', 'yellow', '🎤 麥克風已開啟。');
@@ -1439,6 +1454,7 @@
                     myPeer = null;
                 }
                 isMicOn = false;
+                connectedPeers.clear();
                 
                 btn.classList.remove('mic-active');
                 btn.innerText = "🎤";
@@ -1459,8 +1475,13 @@
                 }
             });
             call.on('close', () => {
+                connectedPeers.delete(call.peer);
                 const audio = document.getElementById(`audio-${call.peer}`);
                 if (audio) audio.remove();
+            });
+            call.on('error', (err) => {
+                console.error('Call error:', err);
+                connectedPeers.delete(call.peer);
             });
         }
 
