@@ -748,7 +748,9 @@ function playSfx(name){
 
 /* ═════════ 背景：Wall Go 對局模擬（棋子移動 + 建牆） ═════════ */
 const cv = document.getElementById('board'), ctx = cv.getContext('2d');
-const N = 7, SHEAR = 0, SQUASH = .58;
+/* SQUASH=1：棋盤格不再壓扁，7×7 就是一個正方形。
+   棋子頂面另外用 PIECE_SQUASH 保持橢圓，維持斜視的立體感。 */
+const N = 7, SHEAR = 0, SQUASH = 1, PIECE_SQUASH = .58;
 let REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches
            || localStorage.getItem('wallGoAnim') === 'off';
 
@@ -768,8 +770,8 @@ function resize(){
   cv.width = W*dpr; cv.height = H*dpr;
   cv.style.width = W+'px'; cv.style.height = H+'px';
   ctx.setTransform(dpr,0,0,dpr,0,0);
-  S = Math.max(Math.min(W/11, H/6.4), 40);
-  OX = W*0.5; OY = H*0.54;
+  S = Math.max(Math.min(W/8.4, H/8.4), 40);
+  OX = W*0.5; OY = H*0.52;
 }
 addEventListener('resize', resize); resize();
 
@@ -1126,7 +1128,7 @@ function drawWall(key, info, now){
 }
 
 function drawPiece(pc){
-  const rx=S*.26, ry=rx*SQUASH, h=S*.40;
+  const rx=S*.26, ry=rx*PIECE_SQUASH, h=S*.40;
   /* 揮槌的人不該被自己那一下震飛，否則棋子會跟手上的槌子脫節 */
   const j = pc===introHero ? JOLT_ZERO : joltAt(pc.dx+.5, pc.dy+.5);
   const lift=j.z, gx=pc.dx+.5+j.ox, gy=pc.dy+.5+j.oy;
