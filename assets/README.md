@@ -22,15 +22,20 @@ CC BY 4.0 要求標示出處，署名已放在 `index.html` 的「系統資訊�
 
 ## sfx/
 
-大廳背景對局動畫的音效，跟背景音樂共用同一顆 🔈 開關（`musicOn()`）。
-瀏覽器政策同樣禁止自動播放，因此第一次點擊或按鍵前 `playSfx()` 直接略過，
-不浪費一次會被擋下的 `play()`。
+**只服務登入前的開場動畫**（`playSfx()` 在 `introStage === null` 時直接略過），
+開場播完進到大廳後就回到只有背景音樂的狀態。跟背景音樂共用同一顆 🔈 開關。
+
+開場動畫原本在頁面載入時就自動播，但瀏覽器禁止未經互動的音訊播放，
+所以那段動畫永遠是靜音的。現在改成：載入後先擺出開場的起始盤面並停住，
+顯示「點擊任何一處開始」（`#intro-gate`），使用者點下去才開演 ——
+那一下同時解鎖音訊，敲擊聲才出得來。`armIntroGate()` 負責這件事，
+`step()` 在 `phase === 'introGate'` 時直接 return 把畫面凍住。
 
 | 檔案 | 觸發時機 | 原始檔 |
 |---|---|---|
-| `piece-move.ogg` | 棋子開始移動（`startMove()`） | `chip-lay-1` — Casino Audio |
-| `wall-build.ogg` | 牆蓋起來（move 動畫結束、`walls.set()`） | `impactWood_medium_000` — Impact Sounds |
-| `wall-break.ogg` | 破牆（`smashWall()`，回合中破牆與開場動畫的手臂砸牆都會走這裡） | `impactMining_000` — Impact Sounds |
+| `piece-move.ogg` | 棋子開始移動（`startMove()`），音量 0.40 | `chip-lay-1` — Casino Audio |
+| `wall-build.ogg` | 牆蓋起來（`walls.set()`），四面牆收網時依序錯開 90ms，音量 0.55 | `impactWood_medium_000` — Impact Sounds |
+| `wall-break.ogg` | 破牆（`smashWall()`），音量 1.00 —— 全場最重的一下 | `impactMining_000` — Impact Sounds |
 
 全部出自 [Kenney](https://kenney.nl) 的音效包，授權
 [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/)（公共領域，
