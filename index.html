@@ -775,6 +775,11 @@ let layoutT = 0, layoutTarget = 0;
 
 /* 靠右版面要與左側登入區塊等高，所以直接量它的實際高度。
    量一次快取起來，避免每幀 getBoundingClientRect 造成重排。 */
+/* 大廳左右都有 UI：選單項目 hover 展開 322px、戰績卡展開 338px，
+   加上 .stage 的 34px 內距。棋盤要讓開這兩塊才不會被壓到。 */
+const LOBBY_RESERVE = 34 + 338 + 26;
+let inLobby = false;
+
 let authBox = null;
 function measureAuth(){
   const el = document.querySelector('.auth-inner');
@@ -803,7 +808,9 @@ function applyLayout(){
   const availH = Math.max(H - SHADOW_PAD*2, 160);
   const sH = availH / FRAME_SPAN;
   /* 置中：整個視窗都可用；靠右：只剩右側約 55% 的寬度 */
-  const s0 = Math.min(W/(FRAME_SPAN+0.6), sH);
+  const s0 = inLobby
+    ? Math.min(Math.max(W - LOBBY_RESERVE*2, 260)/FRAME_SPAN, sH)
+    : Math.min(W/(FRAME_SPAN+0.6), sH);
 
   /* 靠右時對齊左側登入區塊：外框高度與它相同、垂直中心也對齊 */
   let s1 = Math.min(W*0.55/(FRAME_SPAN+0.3), sH);
@@ -892,12 +899,11 @@ let shards=[], bursts=[], breakers=[true,true,true,true], lastBreak=-99;
 let introHero=null, armAlpha=0, hammerAng=0, introSmashed=false, shake=0, cageKeys=[];
 let impact=null, NOW=0, introStage=null;
 
-/* 牆的立體厚度與 footprint 半厚（單位：格）。
-   擠出只往螢幕上方長，對橫牆是加在厚度上（視覺 2*WALL_T + WALL_H 格厚），
-   對直牆卻是加在長度上 —— 所以直牆若照抄 footprint 會比橫牆窄三倍。
-   WALL_VIS 就是橫牆的視覺厚度，直牆直接用它當寬度才會一致。 */
-const WALL_H = 0.30, WALL_T = 0.075;
-const WALL_VIS = 2*WALL_T + WALL_H;
+/* 牆的視覺厚度與深色邊佔比（單位：格 / 比例）。
+   不用立體擠出：擠出量只會加在螢幕的 Y 軸上，對橫牆是加在厚度、
+   對直牆是加在長度，兩個方向永遠不可能一樣大。改畫平面長條後，
+   直牆就是橫牆轉 90 度，尺寸與亮暗比例都完全相同。 */
+const WALL_VIS = 0.45, WALL_DARK = 2/3;
 
 const JOLT_ZERO = { z:0, ox:0, oy:0 };
 /* 座標雜湊：同一格每幀都得到同一組亂數，物件才不會逐幀抖動 */
@@ -1167,34 +1173,33 @@ function drawBoard(){
   poly(c); ctx.strokeStyle='rgba(19,41,75,.55)'; ctx.lineWidth=2; ctx.stroke();
 }
 
-function box(bx0,by0,bx1,by1,h,side,top,base=0){
-  const b=[proj(bx0,by0,base),proj(bx1,by0,base),proj(bx1,by1,base),proj(bx0,by1,base)];
-  const u=[proj(bx0,by0,base+h),proj(bx1,by0,base+h),proj(bx1,by1,base+h),proj(bx0,by1,base+h)];
-  const faces=[0,1,2,3].map(i=>({q:[b[i],b[(i+1)%4],u[(i+1)%4],u[i]],
-    d:(b[i].Y+b[(i+1)%4].Y)/2}));
-  faces.sort((a,c)=>a.d-c.d);
-  /* 不逐塊描邊：相鄰同色牆才能無縫接成一整條，交叉口也不會有接縫 */
-  ctx.fillStyle=side;
-  faces.forEach(f=>{ poly(f.q); ctx.fill(); });
-  poly(u); ctx.fillStyle=top; ctx.fill();
-}
-
 function drawWall(key, info, now){
   const [xs,ys,d]=key.split(','); const x=+xs,y=+ys;
   const age=Math.min((now-info.t)/420,1);
-  let h=S*WALL_H*(info.t?easeBack(age):1);
-  if(phase==='reset') h*=1-fade;
-  if(h<=0.5) return;
-  const t=WALL_T, col=C.p[info.p];
+  let g=(info.t?easeBack(age):1);            /* 彈出動畫：由細長成正常厚度 */
+  if(phase==='reset') g*=1-fade;
+  if(g<=0.02) return;
+
+  const col=C.p[info.p];
   const j = d==='H' ? joltAt(x+0.5,y) : joltAt(x,y+0.5);
+  const T  = WALL_VIS*g/2;                   /* 半厚（格）*/
+  const Dk = WALL_VIS*g*WALL_DARK;           /* 深色邊寬度（格）*/
+
+  const quad=(pts,fill)=>{
+    poly(pts.map(([px,py])=>proj(px+j.ox, py+j.oy, j.z)));
+    ctx.fillStyle=fill; ctx.fill();
+  };
+
+  /* 亮色在上／左，深色邊在下／右 —— 光源在左上，與棋子的投影方向一致。
+     長條置中於格線，直橫兩向就是同一個長條旋轉 90 度。 */
   if(d==='H'){
-    /* 橫牆：footprint 2*WALL_T 厚，擠出後視覺 1 × WALL_VIS 格 */
-    box(x+j.ox, y-t+j.oy, x+1+j.ox, y+t+j.oy, h, col.wallSide, col.wall, j.z);
+    const y0=y-T, y1=y+T, ym=y1-Dk;
+    quad([[x,y0],[x+1,y0],[x+1,ym],[x,ym]], col.wall);
+    quad([[x,ym],[x+1,ym],[x+1,y1],[x,y1]], col.wallSide);
   } else {
-    /* 直牆：寬度直接取 WALL_VIS 與橫牆對齊；footprint 長度扣掉擠出量並下移，
-       擠出後上緣才會準確落在格線上，視覺剛好 WALL_VIS × 1 格。 */
-    const vt = WALL_VIS/2, hz = h/S;
-    box(x-vt+j.ox, y+hz+j.oy, x+vt+j.ox, y+1+j.oy, h, col.wallSide, col.wall, j.z);
+    const x0=x-T, x1=x+T, xm=x1-Dk;
+    quad([[x0,y],[xm,y],[xm,y+1],[x0,y+1]], col.wall);
+    quad([[xm,y],[x1,y],[x1,y+1],[xm,y+1]], col.wallSide);
   }
 }
 
@@ -1518,12 +1523,15 @@ function checkLogin(){
     currentUser = JSON.parse(savedSession);
     document.getElementById('auth-page').classList.remove('on');
     document.getElementById('stage').classList.add('on');
-    /* 大廳的 UI 本來就左右都有，棋盤回到置中當整片背景 */
+    /* 大廳的 UI 左右都有，棋盤回到置中並縮到兩側 rail 之間 */
+    inLobby = true;
     setLayout(0);
+    applyLayout();
     updateProfileUI();
   } else {
     const el=document.getElementById('auth-page');
     /* 開場動畫播完前先藏著；不播動畫時直接顯示 */
+    inLobby = false;
     if(!REDUCED && !el.classList.contains('intro-play')) el.classList.add('intro-wait');
     else setLayout(1, true);          /* 不播開場就沒有過場，直接就定位 */
     el.classList.add('on');
