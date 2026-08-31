@@ -692,7 +692,7 @@ muteBtn.onclick = () => toggleMusic();
 
 /* 背景音樂：assets/bgm.mp3（Carefree — Kevin MacLeod, CC BY 4.0）。
    瀏覽器一律禁止未經互動的自動播放，所以真正開聲是在第一次點擊／按鍵時。 */
-const BGM_VOLUME = 0.22;
+const BGM_VOLUME = 0.16;
 const bgmEl = document.getElementById('bgm');
 
 function musicOn(){ return !muteBtn.classList.contains('off'); }
@@ -712,14 +712,16 @@ function stopMusic(){ bgmEl.pause(); }
    （不走 Web Audio 的 GainNode 是因為 createMediaElementSource 接上後
      聲音只走那條路徑 —— AudioContext 停在 suspended、或以 file:// 開啟
      導致來源被 taint 時，結果是完全沒聲音而且不會拋例外。） */
+/* stagger 決定疊幾層、每層延遲幾毫秒起播。前兩層同時下去給衝擊力，
+   其餘錯開十幾毫秒撐出厚度，比單純同時播五份更像一記重擊而非破音。 */
 const SFX = {
-  move:  { src: 'assets/sfx/piece-move.ogg', vol: 0.34, layers: 1 },   /* 圓柱棋子落定 */
-  wall:  { src: 'assets/sfx/wall-build.ogg', vol: 0.58, layers: 1 },   /* 木板立起 */
-  break: { src: 'assets/sfx/wall-break.ogg', vol: 1.00, layers: 3 },   /* 重擊破牆 —— 全場最重的一下 */
+  move:  { src: 'assets/sfx/piece-move.ogg', vol: 0.26, stagger: [0] },              /* 圓柱棋子落定 */
+  wall:  { src: 'assets/sfx/wall-build.ogg', vol: 0.46, stagger: [0] },              /* 木板立起 */
+  break: { src: 'assets/sfx/wall-break.ogg', vol: 1.00, stagger: [0,0,14,30,48] },   /* 重擊破牆 */
 };
 const sfxEls = {};
-for (const [name, { src, vol, layers }] of Object.entries(SFX)) {
-  sfxEls[name] = Array.from({ length: layers }, () => {
+for (const [name, { src, vol, stagger }] of Object.entries(SFX)) {
+  sfxEls[name] = stagger.map(() => {
     const a = new Audio(src);
     a.preload = 'auto';
     a.volume = vol;
@@ -733,7 +735,11 @@ function playSfx(name){
   if (introStage === null || !musicOn()) return;
   const group = sfxEls[name];
   if (!group) return;
-  group.forEach(a => { a.currentTime = 0; a.play().catch(() => {}); });
+  const { stagger } = SFX[name];
+  group.forEach((a, i) => {
+    const fire = () => { a.currentTime = 0; a.play().catch(() => {}); };
+    if (stagger[i]) setTimeout(fire, stagger[i]); else fire();
+  });
 }
 
 ['pointerdown', 'keydown'].forEach(ev =>
@@ -858,7 +864,7 @@ function startIntro(now){
   pieces.push({p:0, x:cx, y:cy, dx:cx, dy:cy});
   introHero=pieces[0];
   /* 週邊零星的棋子與牆，開場那幾步由它們演出 */
-  [[1,1,1],[6,2,2],[1,6,3],[5,6,2],[6,6,0]].forEach(([x,y,p])=>pieces.push({p, x, y, dx:x, dy:y}));
+  [[1,1,1],[5,1,1],[6,2,2],[1,6,3],[5,6,2],[6,6,0]].forEach(([x,y,p])=>pieces.push({p, x, y, dx:x, dy:y}));
   [[kH(1,1),1],[kV(6,2),2],[kH(1,6),3],[kV(2,1),1]].forEach(([k,p])=>walls.set(k,{p,t:0}));
   armAlpha=0; hammerAng=REST_ANG; introSmashed=false; shake=0;
   cageKeys=[]; introStage='play';

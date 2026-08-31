@@ -33,14 +33,15 @@ CC BY 4.0 要求標示出處，署名已放在 `index.html` 的「系統資訊�
 
 | 檔案 | 觸發時機 | 原始檔 |
 |---|---|---|
-| `piece-move.ogg` | 棋子開始移動（`startMove()`），音量 0.34 | `chip-lay-1` — Casino Audio |
-| `wall-build.ogg` | 牆蓋起來（`walls.set()`），四面牆收網時依序錯開 90ms，音量 0.58 | `impactWood_medium_000` — Impact Sounds |
-| `wall-break.ogg` | 破牆（`smashWall()`），音量 1.00 × **3 層疊播** —— 全場最重的一下 | `impactMining_000` — Impact Sounds |
+| `piece-move.ogg` | 棋子開始移動（`startMove()`），音量 0.26 | `chip-lay-1` — Casino Audio |
+| `wall-build.ogg` | 牆蓋起來（`walls.set()`），四面牆收網時依序錯開 90ms，音量 0.46 | `impactWood_medium_000` — Impact Sounds |
+| `wall-break.ogg` | 破牆（`smashWall()`），音量 1.00 × **5 層疊播** —— 全場最重的一下 | `impactMining_000` — Impact Sounds |
 
 `HTMLAudioElement.volume` 的上限是 `1`，破牆聲已經頂到天花板，再調數字不會有差別。
-要讓它明顯比其他音重，靠的是 `SFX.break.layers = 3`：`playSfx()` 同時播放三份
-同一個取樣疊出音壓（約 +9dB），另外把背景音樂壓到 `0.22`、其他音效壓低，
-讓那一下切得出來。
+要讓它明顯比其他音重，靠的是 `SFX.break.stagger`：陣列長度就是疊幾層，
+每個值是該層延遲幾毫秒起播。目前 `[0,0,14,30,48]` —— 前兩層同時下去給衝擊力，
+其餘錯開撐出厚度，比五份完全同時播更像一記重擊而不是破音。
+另外把背景音樂壓到 `0.16`、其他音效一併壓低，讓那一下切得出來。
 
 **不要改回 Web Audio 的 `GainNode`。** 曾經試過用 `createMediaElementSource()` 加
 `GainNode`（可以大於 1）加限幅器，但那個 API 一旦接上，聲音就**只**走該路徑：
