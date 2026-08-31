@@ -192,9 +192,9 @@
             height: auto;
             max-height: 100%;
             background: var(--sq-dark);
-            padding: 14px;
-            border-radius: 28px;
-            border: 4px solid var(--sq-rim);
+            padding: 0;
+            border-radius: 22px;
+            border: 13px solid var(--sq-rim);
             box-shadow: 0 10px 0 -2px rgba(19,41,75,.45), 0 18px 34px rgba(60,20,6,.32);
             display: grid;
             grid-template-columns: repeat(6, 1fr 0.25fr) 1fr;
@@ -204,33 +204,57 @@
         }
 
         .grid-item { display: flex; justify-content: center; align-items: center; transition: background-color .2s; }
-        .cell { background-color: var(--sq-light); border-radius: 9px; cursor: pointer;
-            box-shadow: inset 0 0 0 2.5px var(--sq-rim); }
+        .cell { background-color: var(--sq-light); border-radius: 3px; cursor: pointer; }
         .cell.cell-alt { background-color: var(--sq-dark); }
         .cell:hover { background-color: var(--yellow); }
         .wall-h, .wall-v { cursor: pointer; border-radius: 4px; }
         .intersection { background-color: transparent; }
 
-        /* 棋子：上亮下暗的漸層 ＋ 深藍描邊，做出大廳那種立體感 */
+        /* ── 棋子：仿大廳的立體圓柱（頂面橢圓 ＋ 柱身 ＋ 落在棋盤上的影子）── */
         .piece {
-            border-radius: 50%; width: 76%; height: 76%;
-            border: 3px solid var(--sq-rim);
-            box-sizing: border-box;
+            position: relative;
+            width: 64%; height: 78%;
             transition: transform .2s; pointer-events: none;
-            box-shadow: 0 3px 0 rgba(19,41,75,.38), inset 0 -3px 5px rgba(0,0,0,.22);
+            /* 用 drop-shadow 而非 box-shadow，影子才會貼合圓柱輪廓而不是方框 */
+            filter: drop-shadow(3px 4px 2.5px rgba(19, 41, 75, .34));
         }
-        .piece-red    { background: linear-gradient(165deg, var(--pc-red-top)    38%, var(--pc-red)    100%); }
-        .piece-blue   { background: linear-gradient(165deg, var(--pc-blue-top)   38%, var(--pc-blue)   100%); }
-        .piece-yellow { background: linear-gradient(165deg, var(--pc-yellow-top) 38%, var(--pc-yellow) 100%); }
-        .piece-green  { background: linear-gradient(165deg, var(--pc-green-top)  38%, var(--pc-green)  100%); }
+        /* 柱身：左右邊緣壓暗做出圓弧受光，底緣是弧線 */
+        .piece::before {
+            content: '';
+            position: absolute; left: 0; right: 0; top: 20%; bottom: 0;
+            border: 2.5px solid var(--sq-rim); border-top: none;
+            border-radius: 0 0 50% 50% / 0 0 26% 26%;
+            background: linear-gradient(to right,
+                var(--pc-side) 0%, var(--pc-body) 28%, var(--pc-top) 52%,
+                var(--pc-body) 76%, var(--pc-side) 100%);
+        }
+        /* 頂面：橢圓 ＋ 內圈環線，蓋住柱身開口 */
+        .piece::after {
+            content: '';
+            position: absolute; left: 0; right: 0; top: 0; height: 40%;
+            border: 2.5px solid var(--sq-rim); border-radius: 50%;
+            background:
+                radial-gradient(closest-side ellipse at 50% 50%,
+                    transparent 0 60%, rgba(19, 41, 75, .38) 60% 71%, transparent 71%),
+                var(--pc-top);
+        }
+        .piece-red    { --pc-body: var(--pc-red);    --pc-top: var(--pc-red-top);    --pc-side: var(--pc-red-side); }
+        .piece-blue   { --pc-body: var(--pc-blue);   --pc-top: var(--pc-blue-top);   --pc-side: var(--pc-blue-side); }
+        .piece-yellow { --pc-body: var(--pc-yellow); --pc-top: var(--pc-yellow-top); --pc-side: var(--pc-yellow-side); }
+        .piece-green  { --pc-body: var(--pc-green);  --pc-top: var(--pc-green-top);  --pc-side: var(--pc-green-side); }
 
-        /* 牆：主色板身 ＋ 下緣暗面，看起來像立起來的木板 */
-        .wall-placed { cursor: default; border-radius: 4px;
-            box-shadow: inset 0 -3px 0 rgba(0,0,0,.28), 0 2px 0 rgba(19,41,75,.35); }
-        .wall-red    { background-color: var(--pc-red)    !important; }
-        .wall-blue   { background-color: var(--pc-blue)   !important; }
-        .wall-yellow { background-color: var(--pc-yellow) !important; }
-        .wall-green  { background-color: var(--pc-green)  !important; }
+        /* ── 牆：上為受光的板面、下為暗側面，看起來像立在棋盤上的板子 ── */
+        .wall-placed {
+            cursor: default; border-radius: 2px;
+            border: 2px solid var(--sq-rim);
+            background-image: linear-gradient(to bottom,
+                var(--w-body) 0 64%, var(--w-side) 64% 100%) !important;
+            box-shadow: 0 2px 3px rgba(19, 41, 75, .34);
+        }
+        .wall-red    { --w-body: var(--pc-red);    --w-side: var(--pc-red-side); }
+        .wall-blue   { --w-body: var(--pc-blue);   --w-side: var(--pc-blue-side); }
+        .wall-yellow { --w-body: var(--pc-yellow); --w-side: var(--pc-yellow-side); }
+        .wall-green  { --w-body: var(--pc-green);  --w-side: var(--pc-green-side); }
 
         .territory-red { background-color: rgba(217, 79, 43, .42) !important; }
         .territory-blue { background-color: rgba(74, 146, 196, .42) !important; }
@@ -241,8 +265,13 @@
             box-shadow: inset 0 0 0 3px var(--sq-rim); }
         .highlight-wall { background-color: var(--pink) !important; cursor: pointer; border-radius: 4px;
             box-shadow: inset 0 0 0 2px var(--sq-rim); }
-        .selected { transform: scale(1.1);
-            box-shadow: 0 0 0 4px var(--yellow), 0 0 0 6.5px var(--sq-rim), inset 0 -3px 5px rgba(0,0,0,.22); }
+        /* .selected 是加在棋子上的：方框 box-shadow 會露出圓柱外的直角，
+           改用堆疊的 drop-shadow 讓光暈貼合柱體輪廓 */
+        .piece.selected {
+            transform: scale(1.08);
+            filter: drop-shadow(0 0 2px var(--yellow)) drop-shadow(0 0 5px var(--yellow))
+                    drop-shadow(3px 4px 2.5px rgba(19, 41, 75, .34));
+        }
 
         .right-spacer { width: 240px; flex-shrink: 0; transition: width .4s cubic-bezier(.175,.885,.32,1.275); }
         /* 聊天室展開時把右欄撐開，棋盤讓位而不是被蓋住 */
