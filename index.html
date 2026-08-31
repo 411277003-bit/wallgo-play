@@ -903,8 +903,9 @@ let impact=null, NOW=0, introStage=null;
    關鍵在浮起是往「左上」的等量斜向位移，而不是只往上 —— 只往上的話
    位移量只加在 Y 軸，對橫牆是加在厚度、對直牆是加在長度，兩個方向
    永遠不可能一樣大。斜向位移同時加在 X 與 Y，兩者的視覺尺寸就都是
-   (2*WALL_T + WALL_D) × 1 格，是同一個形狀轉 90 度。 */
-const WALL_T = 0.06, WALL_D = 0.18;
+   (2*WALL_T + WALL_D) × (1 + WALL_D) 格，是同一個形狀轉 90 度。
+   WALL_D 不宜過大，否則整排牆看起來會像斜的。 */
+const WALL_T = 0.10, WALL_D = 0.10;
 const WALL_VIS = 2*WALL_T + WALL_D;
 
 const JOLT_ZERO = { z:0, ox:0, oy:0 };
@@ -1195,12 +1196,13 @@ function drawWall(key, info, now){
   const col=C.p[info.p], T=WALL_T, D=WALL_D, d=D*g;
   const j = dir==='H' ? joltAt(x+0.5,y) : joltAt(x,y+0.5);
 
-  /* footprint 依最終位移量擺放，浮起後視覺剛好是 (2T+D) × 1 格、置中於格線；
+  /* footprint 精確貼齊格線、長度就是整整一格，不做任何內縮 ——
+     相鄰的牆底面才會首尾相接、頂面也同樣相接，中間不會空出洞。
      動畫過程中頂面由 base 往左上升起，看起來就是牆浮出棋盤。 */
   if(dir==='H'){
-    slab(x+D+j.ox, y+D/2-T+j.oy, x+1+j.ox, y+D/2+T+j.oy, d, col.wallSide, col.wall, j.z);
+    slab(x+j.ox, y-T+j.oy, x+1+j.ox, y+T+j.oy, d, col.wallSide, col.wall, j.z);
   } else {
-    slab(x+D/2-T+j.ox, y+D+j.oy, x+D/2+T+j.ox, y+1+j.oy, d, col.wallSide, col.wall, j.z);
+    slab(x-T+j.ox, y+j.oy, x+T+j.ox, y+1+j.oy, d, col.wallSide, col.wall, j.z);
   }
 }
 
